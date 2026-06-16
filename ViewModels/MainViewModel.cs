@@ -1,10 +1,12 @@
 using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
+using System.Windows.Data;
 using RCMenuManager.Helpers;
 using RCMenuManager.Models;
 using RCMenuManager.Services;
@@ -22,6 +24,8 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<ScopeOption> Scopes { get; } = new();
     public ObservableCollection<MenuItemViewModel> MenuItems { get; } = new();
     public EditPanelViewModel EditPanel { get; } = new();
+    /// <summary>Filtered view used by the Preview tab to hide Extended items by default.</summary>
+    public ICollectionView PreviewView { get; }
 
     [ObservableProperty]
     private ScopeOption? _selectedScope;
@@ -30,6 +34,11 @@ public partial class MainViewModel : ObservableObject
     private MenuItemViewModel? _selectedItem;
 
     public bool HasSelectedItem => SelectedItem is not null;
+
+    [ObservableProperty]
+    private bool _showExtended;
+
+    partial void OnShowExtendedChanged(bool value) => PreviewView.Refresh();
 
     partial void OnSelectedItemChanged(MenuItemViewModel? value)
     {
@@ -57,6 +66,9 @@ public partial class MainViewModel : ObservableObject
         _parser = parser;
         _icons = icons;
         _writer = writer;
+
+        PreviewView = CollectionViewSource.GetDefaultView(MenuItems);
+        PreviewView.Filter = obj => obj is MenuItemViewModel m && (_showExtended || !m.IsExtended);
 
         Scopes.Add(new ScopeOption("文件 (HKCR\\*\\shell)", MenuScope.AllFiles));
         Scopes.Add(new ScopeOption("文件夹 (HKCR\\Directory\\shell)", MenuScope.Folder));
@@ -96,6 +108,12 @@ public partial class MainViewModel : ObservableObject
     {
         if (SelectedScope is null) return;
         await LoadAsync(SelectedScope.Scope);
+    }
+
+    [RelayCommand]
+    private void SelectPreviewItem(MenuItemViewModel? item)
+    {
+        if (item is not null) SelectedItem = item;
     }
 
     [RelayCommand]
