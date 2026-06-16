@@ -137,6 +137,84 @@ public class RegistryWriteServiceTests
         svc.Disable(RegistryHive.CurrentUser, Verb, "Folder", "open");
         Assert.Equal(1, backup.CallCount);
     }
+
+    [Fact]
+    public void CreateRoot_creates_verb_and_command_subkeys()
+    {
+        var (svc, writer, _, _) = Make();
+        var draft = new EditableVerbDraft
+        {
+            VerbName = "MyVerb",
+            DisplayName = "我的菜单",
+            Command = "notepad.exe",
+            IsExtended = false,
+            Position = "Top",
+        };
+        svc.CreateRootVerb(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell", "Folder", draft);
+        Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\MyVerb"));
+        Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\MyVerb\command"));
+        Assert.True(writer.ValueExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\MyVerb", string.Empty));
+        Assert.True(writer.ValueExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\MyVerb", "Position"));
+        Assert.True(writer.ValueExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\MyVerb\command", string.Empty));
+    }
+
+    [Fact]
+    public void CreateRoot_throws_RegistryConflict_when_verb_already_exists()
+    {
+        var (svc, writer, _, _) = Make();
+        writer.CreateSubKey(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\MyVerb");
+        var draft = new EditableVerbDraft { VerbName = "MyVerb", DisplayName = "X", Command = "x.exe" };
+        Assert.Throws<RegistryConflictException>(() =>
+            svc.CreateRootVerb(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell", "Folder", draft));
+    }
+
+    [Fact]
+    public void CreateRoot_parent_only_creates_shell_subkey_without_command()
+    {
+        var (svc, writer, _, _) = Make();
+        var draft = new EditableVerbDraft
+        {
+            VerbName = "Cascade",
+            DisplayName = "级联",
+            IsParentOnly = true,
+        };
+        svc.CreateRootVerb(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell", "Folder", draft);
+        Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade"));
+        Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade\shell"));
+        Assert.False(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade\command"));
+    }
+
+    [Fact]
+    public void CreateChild_writes_under_parent_shell_subkey()
+    {
+        var (svc, writer, _, _) = Make();
+        writer.CreateSubKey(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade\shell");
+        var draft = new EditableVerbDraft
+        {
+            VerbName = "Child1",
+            DisplayName = "子项 1",
+            Command = "child.exe",
+        };
+        svc.CreateChildVerb(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade", "Folder", draft);
+        Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade\shell\Child1"));
+        Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade\shell\Child1\command"));
+    }
+
+    [Fact]
+    public void CreateChild_creates_parent_shell_subkey_when_missing()
+    {
+        var (svc, writer, _, _) = Make();
+        writer.CreateSubKey(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade");
+        var draft = new EditableVerbDraft
+        {
+            VerbName = "Child1",
+            DisplayName = "子项 1",
+            Command = "child.exe",
+        };
+        svc.CreateChildVerb(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade", "Folder", draft);
+        Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade\shell"));
+        Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade\shell\Child1"));
+    }
 }
 
 internal sealed class RecordingBackup : IBackupService

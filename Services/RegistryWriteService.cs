@@ -76,6 +76,67 @@ public sealed class RegistryWriteService
                 _writer.DeleteValue(hive, subKey, "Position");
         });
 
+    /// <summary>Creates a brand-new verb at the scope root.</summary>
+    public void CreateRootVerb(RegistryHive hive, string scopeShellSubKey, string scopeId, EditableVerbDraft draft)
+    {
+        if (string.IsNullOrWhiteSpace(draft.VerbName))
+            throw new ArgumentException("VerbName 不能为空", nameof(draft));
+
+        var verbKey = scopeShellSubKey + "\\" + draft.VerbName;
+        if (!CanWrite(hive))
+            throw new ElevationRequiredException(hive, verbKey);
+        if (_writer.KeyExists(hive, verbKey))
+            throw new RegistryConflictException(hive, verbKey);
+
+        Run(hive, verbKey, scopeId, draft.VerbName, draft.IsParentOnly ? "CreateParent" : "CreateRoot", () =>
+            ApplyDraft(hive, verbKey, draft, includeShellSubKey: draft.IsParentOnly));
+    }
+
+    /// <summary>Creates a child verb under <paramref name="parentVerbSubKey"/>'s \shell sub-tree.</summary>
+    public void CreateChildVerb(RegistryHive hive, string parentVerbSubKey, string scopeId, EditableVerbDraft draft)
+    {
+        if (string.IsNullOrWhiteSpace(draft.VerbName))
+            throw new ArgumentException("VerbName 不能为空", nameof(draft));
+
+        var parentShell = parentVerbSubKey + "\\shell";
+        var verbKey = parentShell + "\\" + draft.VerbName;
+        if (!CanWrite(hive))
+            throw new ElevationRequiredException(hive, verbKey);
+        if (_writer.KeyExists(hive, verbKey))
+            throw new RegistryConflictException(hive, verbKey);
+
+        Run(hive, verbKey, scopeId, draft.VerbName, "CreateChild", () =>
+        {
+            if (!_writer.KeyExists(hive, parentShell))
+                _writer.CreateSubKey(hive, parentShell);
+            ApplyDraft(hive, verbKey, draft, includeShellSubKey: draft.IsParentOnly);
+        });
+    }
+
+    private void ApplyDraft(RegistryHive hive, string verbKey, EditableVerbDraft draft, bool includeShellSubKey)
+    {
+        _writer.CreateSubKey(hive, verbKey);
+        if (!string.IsNullOrEmpty(draft.DisplayName))
+            _writer.SetStringValue(hive, verbKey, string.Empty, draft.DisplayName);
+        if (!string.IsNullOrEmpty(draft.IconExpression))
+            _writer.SetStringValue(hive, verbKey, "Icon", draft.IconExpression);
+        if (draft.IsExtended)
+            _writer.SetStringValue(hive, verbKey, "Extended", string.Empty);
+        if (string.Equals(draft.Position, "Top", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(draft.Position, "Bottom", StringComparison.OrdinalIgnoreCase))
+            _writer.SetStringValue(hive, verbKey, "Position", draft.Position);
+
+        if (includeShellSubKey)
+        {
+            _writer.CreateSubKey(hive, verbKey + "\\shell");
+        }
+        else if (!string.IsNullOrEmpty(draft.Command))
+        {
+            _writer.CreateSubKey(hive, verbKey + "\\command");
+            _writer.SetStringValue(hive, verbKey + "\\command", string.Empty, draft.Command);
+        }
+    }
+
     private void Run(RegistryHive hive, string subKey, string scopeId, string verbName, string op, Action mutate)
     {
         if (!CanWrite(hive))
