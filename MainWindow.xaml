@@ -29,7 +29,14 @@
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Style="{StaticResource Card}">
-                <c:MenuTreeView />
+                <TabControl Background="Transparent" BorderThickness="0" Padding="0">
+                    <TabItem Header="列表">
+                        <c:MenuTreeView />
+                    </TabItem>
+                    <TabItem Header="预览">
+                        <c:ContextMenuPreview />
+                    </TabItem>
+                </TabControl>
             </Border>
 
             <GridSplitter Grid.Column="1" Width="6" Background="Transparent"
