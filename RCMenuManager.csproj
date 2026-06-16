@@ -23,4 +23,15 @@
     <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="RCMenuManager.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tests/ contains a separate test project; exclude its sources from the main app. -->
+    <Compile Remove="Tests\**\*.cs" />
+    <Page Remove="Tests\**\*.xaml" />
+    <None Remove="Tests\**" />
+  </ItemGroup>
+
 </Project>
