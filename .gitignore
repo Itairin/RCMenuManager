@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+.tmp_screens/
+.smoke/
+*.user
+packages/
+TestResults/
+.tmp_append.md

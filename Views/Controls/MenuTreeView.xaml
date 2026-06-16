@@ -1,0 +1,70 @@
+﻿<UserControl x:Class="RCMenuManager.Views.Controls.MenuTreeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:RCMenuManager.ViewModels"
+             xmlns:conv="clr-namespace:RCMenuManager.Converters">
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+        <conv:StringNotEmptyToVisibilityConverter x:Key="StringToVis" />
+
+        <HierarchicalDataTemplate DataType="{x:Type vm:MenuItemViewModel}" ItemsSource="{Binding Children}">
+            <Grid Margin="0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="20" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Image Grid.Column="0" Width="16" Height="16"
+                       VerticalAlignment="Center"
+                       Source="{Binding Icon}"
+                       SnapsToDevicePixels="True" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
+                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding VerbName}" Margin="8,0,0,0"
+                               Foreground="#5F6B7A"
+                               FontSize="11" VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
+                    <Border Visibility="{Binding Flags, Converter={StaticResource StringToVis}}"
+                            Background="#EEF2F8" CornerRadius="3" Padding="6,1"
+                            Margin="0,0,4,0">
+                        <TextBlock Text="{Binding Flags}" Foreground="#3B4A60" FontSize="11" />
+                    </Border>
+                    <Border Visibility="{Binding OriginText, Converter={StaticResource StringToVis}}"
+                            Background="#F1ECFD" CornerRadius="3" Padding="6,1">
+                        <TextBlock Text="{Binding OriginText}" Foreground="#5B27C9" FontSize="11" />
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </HierarchicalDataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Border Grid.Row="0" BorderBrush="#E1E3E8" BorderThickness="0,0,0,1" Padding="12,10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="菜单项" FontWeight="SemiBold" FontSize="13" Foreground="#1F2937" />
+                <TextBlock Margin="10,0,0,0" Foreground="#5F6B7A" FontSize="12"
+                           Text="{Binding MenuItems.Count, StringFormat=共 {0} 项}" />
+                <TextBlock Margin="10,0,0,0" Foreground="#5F6B7A" FontSize="12"
+                           Text="加载中..."
+                           Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}" />
+            </StackPanel>
+        </Border>
+        <TreeView Grid.Row="1"
+                  x:Name="Tree"
+                  ItemsSource="{Binding MenuItems}"
+                  BorderThickness="0"
+                  Background="Transparent"
+                  SelectedItemChanged="Tree_SelectedItemChanged">
+            <TreeView.ItemContainerStyle>
+                <Style TargetType="TreeViewItem">
+                    <Setter Property="IsExpanded" Value="True" />
+                </Style>
+            </TreeView.ItemContainerStyle>
+        </TreeView>
+    </Grid>
+</UserControl>

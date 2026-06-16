@@ -1,0 +1,119 @@
+﻿<UserControl x:Class="RCMenuManager.Views.Controls.DetailsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:RCMenuManager.ViewModels"
+             xmlns:conv="clr-namespace:RCMenuManager.Converters">
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisInverse" TrueValue="Collapsed" FalseValue="Visible" />
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Border Grid.Row="0" BorderBrush="#E1E3E8" BorderThickness="0,0,0,1" Padding="12,10">
+            <TextBlock Text="详情" FontWeight="SemiBold" FontSize="13" Foreground="#1F2937" />
+        </Border>
+        <Grid Grid.Row="1">
+            <TextBlock Text="选中左侧菜单项以查看详情。"
+                       Foreground="#5F6B7A" FontSize="12" Margin="14"
+                       Visibility="{Binding HasSelectedItem, Converter={StaticResource BoolToVisInverse}}" />
+            <ScrollViewer Padding="14" VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding HasSelectedItem, Converter={StaticResource BoolToVis}}">
+                <StackPanel DataContext="{Binding SelectedItem}">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <Image Width="32" Height="32" Source="{Binding Icon}" />
+                        <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding DisplayName}" FontSize="16" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding VerbName}" Foreground="#5F6B7A" FontSize="12" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <TextBlock Text="命令" FontWeight="SemiBold" Foreground="#1F2937" Margin="0,4,0,4" />
+                    <Border Background="#F4F5F7" CornerRadius="4" Padding="8,6">
+                        <TextBox Text="{Binding Command, Mode=OneWay}" IsReadOnly="True"
+                                 BorderThickness="0" Background="Transparent"
+                                 TextWrapping="Wrap" FontFamily="Consolas, monospace" />
+                    </Border>
+
+                    <StackPanel Visibility="{Binding HasEnvExpansion, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="展开后的命令" FontWeight="SemiBold" Foreground="#1F2937" Margin="0,12,0,4" />
+                        <Border Background="#F4F5F7" CornerRadius="4" Padding="8,6">
+                            <TextBox Text="{Binding ExpandedCommand, Mode=OneWay}" IsReadOnly="True"
+                                     BorderThickness="0" Background="Transparent"
+                                     TextWrapping="Wrap" FontFamily="Consolas, monospace" />
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding MuiVerb}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="MUIVerb" FontWeight="SemiBold" Foreground="#1F2937" Margin="0,12,0,4" />
+                        <Border Background="#F4F5F7" CornerRadius="4" Padding="8,6">
+                            <TextBox Text="{Binding MuiVerb, Mode=OneWay}" IsReadOnly="True"
+                                     BorderThickness="0" Background="Transparent"
+                                     TextWrapping="Wrap" FontFamily="Consolas, monospace" />
+                        </Border>
+                    </StackPanel>
+
+                    <TextBlock Text="注册表路径" FontWeight="SemiBold" Foreground="#1F2937" Margin="0,12,0,4" />
+                    <Border Background="#F4F5F7" CornerRadius="4" Padding="8,6">
+                        <TextBox Text="{Binding RegistryPath, Mode=OneWay}" IsReadOnly="True"
+                                 BorderThickness="0" Background="Transparent"
+                                 TextWrapping="Wrap" FontFamily="Consolas, monospace" />
+                    </Border>
+
+                    <TextBlock Text="标记" FontWeight="SemiBold" Foreground="#1F2937" Margin="0,12,0,4" />
+                    <WrapPanel>
+                        <Border Background="#EEF2F8" Margin="0,0,6,6" CornerRadius="3" Padding="6,2"
+                                Visibility="{Binding IsExtended, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="Extended (Shift+右键)" Foreground="#3B4A60" FontSize="11" />
+                        </Border>
+                        <Border Background="#FBE7B6" Margin="0,0,6,6" CornerRadius="3" Padding="6,2"
+                                Visibility="{Binding IsProgrammaticOnly, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="ProgrammaticAccessOnly" Foreground="#7A4A00" FontSize="11" />
+                        </Border>
+                        <Border Background="#FBE7B6" Margin="0,0,6,6" CornerRadius="3" Padding="6,2"
+                                Visibility="{Binding IsLegacyDisabled, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="LegacyDisable" Foreground="#7A4A00" FontSize="11" />
+                        </Border>
+                        <Border Background="#FAD9D8" Margin="0,0,6,6" CornerRadius="3" Padding="6,2"
+                                Visibility="{Binding IsSystemVerb, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="系统 Verb" Foreground="#9A1F1B" FontSize="11" />
+                        </Border>
+                        <Border Background="#E1F0E5" Margin="0,0,6,6" CornerRadius="3" Padding="6,2"
+                                Visibility="{Binding IsTop, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="置顶 (Position=Top)" Foreground="#1F6B3F" FontSize="11" />
+                        </Border>
+                        <Border Background="#E1F0E5" Margin="0,0,6,6" CornerRadius="3" Padding="6,2"
+                                Visibility="{Binding IsBottom, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="置底 (Position=Bottom)" Foreground="#1F6B3F" FontSize="11" />
+                        </Border>
+                        <Border Background="#F1ECFD" Margin="0,0,6,6" CornerRadius="3" Padding="6,2"
+                                Visibility="{Binding CascadingText, Converter={StaticResource StringToVis}}">
+                            <TextBlock Foreground="#5B27C9" FontSize="11">
+                                <Run Text="级联 " />
+                                <Run Text="{Binding CascadingText, Mode=OneWay}" />
+                            </TextBlock>
+                        </Border>
+                        <Border Background="#F1ECFD" Margin="0,0,6,6" CornerRadius="3" Padding="6,2">
+                            <TextBlock FontSize="11" Foreground="#5B27C9">
+                                <Run Text="来源 " />
+                                <Run Text="{Binding OriginText, Mode=OneWay}" />
+                            </TextBlock>
+                        </Border>
+                    </WrapPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>
