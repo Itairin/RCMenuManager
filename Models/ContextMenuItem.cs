@@ -63,6 +63,9 @@ public sealed class ContextMenuItem
     /// <summary>True when the user has flagged the entry hidden via <c>HideBasedOnVelocityId</c> etc.</summary>
     public bool IsHidden => IsProgrammaticOnly || IsLegacyDisabled;
 
+    /// <summary>True when the verb has cascading children but no command, i.e. it is a parent-only entry.</summary>
+    public bool IsParentOnly => string.IsNullOrEmpty(Command) && Children.Count > 0;
+
     public override string ToString() => $"{DisplayName} ({VerbName})";
 }
 
