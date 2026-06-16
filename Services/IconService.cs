@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -23,6 +24,26 @@ public class IconService
             return null;
 
         return _cache.GetOrAdd(expression, ResolveCore);
+    }
+
+    /// <summary>
+    /// Enumerates the first <paramref name="max"/> icons stored inside a .dll
+    /// or .exe and returns them as bitmaps. Index of each entry maps to the
+    /// icon-resource index used by ExtractIconExW (i.e. the same index used by
+    /// "shell32.dll,42" verb expressions).
+    /// </summary>
+    public IReadOnlyList<(int index, BitmapSource bitmap)> EnumerateIconsFromFile(string path, int max = 64)
+    {
+        var list = new List<(int, BitmapSource)>();
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            return list;
+        for (var i = 0; i < max; i++)
+        {
+            var bmp = ExtractIcon(path, i);
+            if (bmp is null) break;
+            list.Add((i, bmp));
+        }
+        return list;
     }
 
     private static BitmapSource? ResolveCore(string expression)
