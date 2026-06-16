@@ -70,6 +70,31 @@ public partial class MenuItemViewModel : ObservableObject
     public bool IsTop => string.Equals(Model.Position, "Top", StringComparison.OrdinalIgnoreCase);
     public bool IsBottom => string.Equals(Model.Position, "Bottom", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Hive that should be targeted when writing back this verb.
+    /// HKCR origins map to HKLM since HKCR is the merged virtual view.</summary>
+    public Microsoft.Win32.RegistryHive WriteHive => Model.Origin switch
+    {
+        RegistryHiveOrigin.CurrentUser => Microsoft.Win32.RegistryHive.CurrentUser,
+        RegistryHiveOrigin.LocalMachine => Microsoft.Win32.RegistryHive.LocalMachine,
+        RegistryHiveOrigin.ClassesRoot => Microsoft.Win32.RegistryHive.LocalMachine,
+        _ => Microsoft.Win32.RegistryHive.CurrentUser,
+    };
+
+    /// <summary>The verb's sub-key path (without hive prefix), parsed from RegistryPath.</summary>
+    public string SubKey
+    {
+        get
+        {
+            var path = Model.RegistryPath;
+            var idx = path.IndexOf('\\');
+            return idx < 0 ? string.Empty : path.Substring(idx + 1);
+        }
+    }
+
+    /// <summary>True when the verb can host nested children (no command yet, or already nested-shell).</summary>
+    public bool CanHaveChildren =>
+        string.IsNullOrEmpty(Command) || Cascading == CascadingKind.NestedShell;
+
     /// <summary>One-line summary for the badge area in the tree view.</summary>
     public string Flags
     {
