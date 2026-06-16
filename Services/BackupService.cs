@@ -10,7 +10,7 @@ namespace RCMenuManager.Services;
 /// export is the safety net before any verb mutation: if it fails, the caller
 /// must abort the write.
 /// </summary>
-public sealed class BackupService
+public sealed class BackupService : IBackupService
 {
     private readonly string _backupDir;
 

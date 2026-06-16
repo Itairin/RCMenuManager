@@ -21,7 +21,7 @@ public sealed record OperationLogEntry(
 /// Append-only JSON log of every write attempt. The file is created on first
 /// use and never rotated; Phase 6 will read this list to drive its UI.
 /// </summary>
-public sealed class OperationLogService
+public sealed class OperationLogService : IOperationLog
 {
     private readonly string _path;
     private readonly object _lock = new();
