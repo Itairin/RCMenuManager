@@ -1,10 +1,14 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
+using RCMenuManager.Helpers;
 using RCMenuManager.Models;
 using RCMenuManager.Services;
+using RCMenuManager.Views.Dialogs;
 
 namespace RCMenuManager.ViewModels;
 
@@ -13,9 +17,11 @@ public partial class MainViewModel : ObservableObject
     private readonly RegistryService _registry;
     private readonly MenuParserService _parser;
     private readonly IconService _icons;
+    private readonly RegistryWriteService _writer;
 
     public ObservableCollection<ScopeOption> Scopes { get; } = new();
     public ObservableCollection<MenuItemViewModel> MenuItems { get; } = new();
+    public EditPanelViewModel EditPanel { get; } = new();
 
     [ObservableProperty]
     private ScopeOption? _selectedScope;
@@ -28,6 +34,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedItemChanged(MenuItemViewModel? value)
     {
         OnPropertyChanged(nameof(HasSelectedItem));
+        if (EditPanel.IsEditing) EditPanel.CancelEdit();
     }
 
     [ObservableProperty]
@@ -41,11 +48,15 @@ public partial class MainViewModel : ObservableObject
 
     public bool IsAdministrator { get; }
 
-    public MainViewModel(RegistryService registry, MenuParserService parser, IconService icons)
+    /// <summary>Set by App.xaml.cs from --scope= argument; consumed once during startup.</summary>
+    public string? PendingScopeId { get; set; }
+
+    public MainViewModel(RegistryService registry, MenuParserService parser, IconService icons, RegistryWriteService writer)
     {
         _registry = registry;
         _parser = parser;
         _icons = icons;
+        _writer = writer;
 
         Scopes.Add(new ScopeOption("文件 (HKCR\\*\\shell)", MenuScope.AllFiles));
         Scopes.Add(new ScopeOption("文件夹 (HKCR\\Directory\\shell)", MenuScope.Folder));
@@ -54,8 +65,24 @@ public partial class MainViewModel : ObservableObject
         Scopes.Add(new ScopeOption("桌面 (HKCR\\DesktopBackground\\Shell)", MenuScope.Desktop));
         Scopes.Add(new ScopeOption("文件与文件夹 (AllFilesystemObjects)", MenuScope.AllFilesystemObjects));
 
-        IsAdministrator = Helpers.UacHelper.IsAdministrator();
-        SelectedScope = Scopes[0];
+        IsAdministrator = UacHelper.IsAdministrator();
+        SelectedScope = ResolvePendingScope() ?? Scopes[0];
+    }
+
+    private ScopeOption? ResolvePendingScope()
+    {
+        if (string.IsNullOrEmpty(PendingScopeId)) return null;
+        var scope = MenuScope.FromScopeId(PendingScopeId);
+        foreach (var s in Scopes)
+            if (s.Scope.Equals(scope))
+                return s;
+        if (scope.Type == ScopeType.FileExtension)
+        {
+            var opt = new ScopeOption(scope.DisplayName, scope);
+            Scopes.Add(opt);
+            return opt;
+        }
+        return null;
     }
 
     partial void OnSelectedScopeChanged(ScopeOption? value)
@@ -75,15 +102,12 @@ public partial class MainViewModel : ObservableObject
     private async Task LoadCustomExtensionAsync()
     {
         var ext = (CustomExtensionInput ?? string.Empty).Trim();
-        if (string.IsNullOrEmpty(ext))
-            return;
-        if (!ext.StartsWith('.'))
-            ext = "." + ext;
+        if (string.IsNullOrEmpty(ext)) return;
+        if (!ext.StartsWith('.')) ext = "." + ext;
         var progId = _registry.ResolveProgId(ext);
         var scope = MenuScope.ForExtension(ext, progId);
         var label = string.IsNullOrEmpty(progId) ? $"{ext} 文件" : $"{ext} 文件 ({progId})";
         var option = new ScopeOption(label, scope);
-        // Insert after fixed scopes, replacing any prior custom row.
         TrimCustomOptions();
         Scopes.Add(option);
         SelectedScope = option;
@@ -93,10 +117,8 @@ public partial class MainViewModel : ObservableObject
     private void TrimCustomOptions()
     {
         for (int i = Scopes.Count - 1; i >= 0; i--)
-        {
             if (Scopes[i].Scope.Type == ScopeType.FileExtension)
                 Scopes.RemoveAt(i);
-        }
     }
 
     public async Task LoadAsync(MenuScope scope)
@@ -106,9 +128,6 @@ public partial class MainViewModel : ObservableObject
         MenuItems.Clear();
         try
         {
-            // Stay on the UI thread when reading the registry; HKCR/HKLM are fast and the
-            // current process is a desktop app, so this avoids the synchronization dance
-            // for a few hundred verbs at most.
             var items = await Task.Run(() => _parser.GetMenuItems(scope));
             foreach (var item in items)
                 MenuItems.Add(new MenuItemViewModel(item, _icons));

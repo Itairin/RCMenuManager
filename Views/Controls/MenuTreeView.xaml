@@ -45,14 +45,22 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Border Grid.Row="0" BorderBrush="#E1E3E8" BorderThickness="0,0,0,1" Padding="12,10">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="菜单项" FontWeight="SemiBold" FontSize="13" Foreground="#1F2937" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="菜单项" FontWeight="SemiBold" FontSize="13" Foreground="#1F2937" />
                 <TextBlock Margin="10,0,0,0" Foreground="#5F6B7A" FontSize="12"
                            Text="{Binding MenuItems.Count, StringFormat=共 {0} 项}" />
                 <TextBlock Margin="10,0,0,0" Foreground="#5F6B7A" FontSize="12"
                            Text="加载中..."
                            Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}" />
             </StackPanel>
+                <Button Grid.Column="1" Content="+ 新增菜单项" Padding="10,4" Height="26"
+                        Command="{Binding AddRootCommand}" />
+            </Grid>
         </Border>
         <TreeView Grid.Row="1"
                   x:Name="Tree"
