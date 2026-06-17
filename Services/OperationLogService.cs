@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using Microsoft.Win32;
@@ -43,5 +44,18 @@ public sealed class OperationLogService : IOperationLog
         var json = JsonSerializer.Serialize(entry);
         lock (_lock)
             File.AppendAllText(_path, json + Environment.NewLine);
+    }
+
+    public IReadOnlyList<OperationLogEntry> ReadAll()
+    {
+        if (!File.Exists(_path)) return Array.Empty<OperationLogEntry>();
+        var list = new List<OperationLogEntry>();
+        foreach (var line in File.ReadAllLines(_path))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            try { list.Add(JsonSerializer.Deserialize<OperationLogEntry>(line)!); }
+            catch { }
+        }
+        return list;
     }
 }
