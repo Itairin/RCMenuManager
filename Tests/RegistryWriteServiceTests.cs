@@ -227,6 +227,9 @@ internal sealed class RecordingBackup : IBackupService
         OnExport?.Invoke();
         return $"recorded:{hive}:{subKey}";
     }
+    public IReadOnlyList<RCMenuManager.Models.BackupRecord> List() => Array.Empty<RCMenuManager.Models.BackupRecord>();
+    public void Import(string filePath) { }
+    public void Delete(string filePath) { }
 }
 
 internal sealed class RecordingLog : IOperationLog
@@ -238,4 +241,5 @@ internal sealed class RecordingLog : IOperationLog
         LastSuccess = entry.success;
         LastError = entry.error;
     }
+    public IReadOnlyList<OperationLogEntry> ReadAll() => Array.Empty<OperationLogEntry>();
 }

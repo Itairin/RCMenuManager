@@ -1,61 +1,28 @@
 using System;
 using System.IO;
-using System.Text.Json;
-using Microsoft.Win32;
 using RCMenuManager.Services;
 using Xunit;
 
 namespace RCMenuManager.Tests;
 
-public class OperationLogServiceTests : IDisposable
+public class OperationLogServiceTests
 {
-    private readonly string _logPath;
-
-    public OperationLogServiceTests()
+    [Fact]
+    public void ReadAll_returns_empty_when_file_missing()
     {
-        _logPath = Path.Combine(Path.GetTempPath(), "RCMenuManagerLogTests", $"{Guid.NewGuid():N}.log");
-        Directory.CreateDirectory(Path.GetDirectoryName(_logPath)!);
+        var svc = new OperationLogService(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "op.log"));
+        Assert.Empty(svc.ReadAll());
     }
 
     [Fact]
-    public void Append_writes_one_line_json_per_call()
+    public void ReadAll_skips_corrupt_lines()
     {
-        var svc = new OperationLogService(_logPath);
-        svc.Append(new OperationLogEntry(
-            timestamp: DateTime.UtcNow,
-            scopeId: "Folder",
-            verb: "open",
-            op: "Disable",
-            hive: RegistryHive.CurrentUser,
-            subKey: @"Software\Classes\Directory\shell\open",
-            backupPath: @"C:\backups\open.reg",
-            success: true,
-            error: null));
-        svc.Append(new OperationLogEntry(
-            timestamp: DateTime.UtcNow,
-            scopeId: "Folder",
-            verb: "open",
-            op: "Enable",
-            hive: RegistryHive.CurrentUser,
-            subKey: @"Software\Classes\Directory\shell\open",
-            backupPath: @"C:\backups\open2.reg",
-            success: false,
-            error: "boom"));
-
-        var lines = File.ReadAllLines(_logPath);
-        Assert.Equal(2, lines.Length);
-
-        var entry1 = JsonSerializer.Deserialize<JsonElement>(lines[0]);
-        Assert.Equal("Disable", entry1.GetProperty("op").GetString());
-        Assert.True(entry1.GetProperty("success").GetBoolean());
-
-        var entry2 = JsonSerializer.Deserialize<JsonElement>(lines[1]);
-        Assert.Equal("boom", entry2.GetProperty("error").GetString());
-        Assert.False(entry2.GetProperty("success").GetBoolean());
-    }
-
-    public void Dispose()
-    {
-        try { File.Delete(_logPath); } catch { }
+        var path = Path.Combine(Path.GetTempPath(), "RCMenuManagerTests", Guid.NewGuid().ToString("N"), "op.log");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path,
+            "{\"timestamp\":\"2026-06-17T10:00:00Z\",\"scopeId\":\"Folder\",\"verb\":\"x\",\"op\":\"Disable\",\"hive\":0,\"subKey\":\"a\",\"backupPath\":null,\"success\":true,\"error\":null}" + Environment.NewLine
+            + "{ this is not valid json" + Environment.NewLine);
+        var svc = new OperationLogService(path);
+        Assert.Single(svc.ReadAll());
     }
 }

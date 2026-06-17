@@ -50,3 +50,37 @@ public class BackupServiceTests : IDisposable
         try { Directory.Delete(_outDir, recursive: true); } catch { }
     }
 }
+
+public class BackupServiceListTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "RCMenuManagerBackupListTests", Guid.NewGuid().ToString("N"));
+    public BackupServiceListTests() => Directory.CreateDirectory(_dir);
+    public void Dispose() { try { Directory.Delete(_dir, true); } catch { } }
+
+    [Fact]
+    public void List_returns_records_newest_first_and_ignores_non_reg()
+    {
+        File.WriteAllText(Path.Combine(_dir, "20260617-142530-Folder-A.reg"), "x");
+        File.WriteAllText(Path.Combine(_dir, "20260617-150000-Folder-B.reg"), "x");
+        File.WriteAllText(Path.Combine(_dir, "ignore.txt"), "noise");
+        var list = new BackupService(_dir).List();
+        Assert.Equal(2, list.Count);
+        Assert.Equal("B", list[0].VerbName);
+        Assert.Equal("A", list[1].VerbName);
+    }
+
+    [Fact]
+    public void List_returns_empty_when_dir_missing() => Assert.Empty(new BackupService(Path.Combine(_dir, "nope")).List());
+
+    [Fact]
+    public void Delete_removes_existing_file()
+    {
+        var path = Path.Combine(_dir, "20260617-142530-Folder-A.reg");
+        File.WriteAllText(path, "x");
+        new BackupService(_dir).Delete(path);
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void Delete_silent_on_missing() => new BackupService(_dir).Delete(Path.Combine(_dir, "never-existed.reg"));
+}
