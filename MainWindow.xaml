@@ -9,7 +9,12 @@
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
         FontFamily="Segoe UI, Microsoft YaHei UI, sans-serif"
-        FontSize="13">
+        FontSize="13"
+        AllowDrop="True"
+        DragEnter="OnWindowDragEnter"
+        DragOver="OnWindowDragOver"
+        DragLeave="OnWindowDragLeave"
+        Drop="OnWindowDrop">
     <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -39,16 +44,33 @@
                 </TabControl>
             </Border>
 
-            <GridSplitter Grid.Column="1" Width="6" Background="Transparent"
-                          HorizontalAlignment="Stretch" />
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"
+                          Background="Transparent" />
 
             <Border Grid.Column="2" Style="{StaticResource Card}">
                 <c:DetailsPanel />
             </Border>
         </Grid>
 
-        <Border Grid.Row="2" Margin="0,12,0,0" Style="{StaticResource Card}" Padding="10,8">
-            <TextBlock Text="{Binding StatusText}" Foreground="#5F6B7A" FontSize="12" />
+        <!-- DragDrop overlay -->
+        <Border Grid.RowSpan="3"
+                IsHitTestVisible="False"
+                Background="#CC3B82F6"
+                BorderBrush="#1D4ED8" BorderThickness="3"
+                CornerRadius="6">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsDragOver}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="拖入文件 / 文件夹 / 驱动器以自动识别作用域"
+                       Foreground="White" FontSize="18" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Border>
     </Grid>
 </Window>
