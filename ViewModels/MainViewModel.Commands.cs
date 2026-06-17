@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
@@ -140,44 +141,20 @@ public partial class MainViewModel
             StatusText = $"已新增 {draft.VerbName}";
             await RefreshAsync();
         }
-        catch (RegistryConflictException ex)
-        {
-            EditPanel.ErrorMessage = ex.Message;
-        }
         catch (Exception ex)
         {
             EditPanel.ErrorMessage = $"操作失败：{ex.Message}";
         }
     }
 
-    private string ScopeIdOrEmpty() => SelectedScope?.Scope.ScopeId ?? string.Empty;
-
-    private static bool ConfirmSystemVerb(string verbName)
-        => ConfirmDialog.Show(
-            "系统关键项",
-            $"该项 ({verbName}) 是系统关键 verb，修改可能导致 Explorer 行为异常。确认继续？",
-            confirmText: "继续", isDestructive: true);
-
-    /// <summary>
-    /// Returns true if the current process is allowed to write to (hive, subKey).
-    /// When elevation is required, asks the user, then relaunches with admin
-    /// privileges and shuts the current instance down. The caller should
-    /// abort the current operation when this returns false.
-    /// </summary>
-    private async Task<bool> EnsureAdministratorAsync(RegistryHive hive, string subKey)
+    [RelayCommand]
+    private async Task LoadCustomExtensionAsync()
     {
-        if (_writer.CanWrite(hive)) return true;
-        var ok = ConfirmDialog.Show(
-            "需要管理员权限",
-            $"该操作需要写入 {hive}\\{subKey}，当前非管理员。是否以管理员身份重启 RCMenuManager？",
-            confirmText: "重启", isDestructive: false);
-        if (!ok) return false;
-        var args = $"--scope={ScopeIdOrEmpty()}";
-        if (UacHelper.RelaunchAsAdmin(args))
-            Application.Current.Shutdown();
-        await Task.CompletedTask;
-        return false;
+        var ext = (CustomExtensionInput ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(ext)) return;
+        await SwitchToExtensionScopeAsync(ext);
     }
+
     [RelayCommand]
     private void ShowBackups()
     {
@@ -241,6 +218,34 @@ public partial class MainViewModel
         return (hive, subKey);
     }
 
+    private string ScopeIdOrEmpty() => SelectedScope?.Scope.ScopeId ?? string.Empty;
+
+    private static bool ConfirmSystemVerb(string verbName)
+        => ConfirmDialog.Show(
+            "系统关键项",
+            $"该项 ({verbName}) 是系统关键 verb，修改可能导致 Explorer 行为异常。确认继续？",
+            confirmText: "继续", isDestructive: true);
+
+    /// <summary>
+    /// Returns true if the current process is allowed to write to (hive, subKey).
+    /// When elevation is required, asks the user, then relaunches with admin
+    /// privileges and shuts the current instance down. The caller should
+    /// abort the current operation when this returns false.
+    /// </summary>
+    private async Task<bool> EnsureAdministratorAsync(RegistryHive hive, string subKey)
+    {
+        if (_writer.CanWrite(hive)) return true;
+        var ok = ConfirmDialog.Show(
+            "需要管理员权限",
+            $"该操作需要写入 {hive}\\{subKey}，当前非管理员。是否以管理员身份重启 RCMenuManager？",
+            confirmText: "重启", isDestructive: false);
+        if (!ok) return false;
+        var args = $"--scope={ScopeIdOrEmpty()}";
+        if (UacHelper.RelaunchAsAdmin(args))
+            Application.Current.Shutdown();
+        await Task.CompletedTask;
+        return false;
+    }
 
     [RelayCommand]
     private void ShowWin11()
@@ -250,5 +255,73 @@ public partial class MainViewModel
         var dlg = new Win11Dialog { Owner = owner, DataContext = vm };
         dlg.ShowDialog();
     }
-}
 
+    public async Task OnFileDroppedAsync(string[] paths)
+    {
+        IsDragOver = false;
+        if (paths is null || paths.Length == 0)
+        {
+            StatusText = "未识别拖入内容";
+            return;
+        }
+        try
+        {
+            var first = paths[0];
+            var info = _fileTypes.Identify(first);
+            switch (info.Kind)
+            {
+                case DragDropKind.Drive:
+                    SwitchToBuiltInScope(MenuScope.Drive, $"已切换到驱动器 {first}");
+                    break;
+                case DragDropKind.Folder:
+                    SwitchToBuiltInScope(MenuScope.Folder, $"已切换到文件夹 {first}");
+                    break;
+                case DragDropKind.File:
+                    var ext = Path.GetExtension(first);
+                    if (string.IsNullOrEmpty(ext))
+                        SwitchToBuiltInScope(MenuScope.AllFiles, "无扩展名，已切换到通用文件");
+                    else
+                        await SwitchToExtensionScopeAsync(ext);
+                    break;
+                default:
+                    StatusText = "不支持的拖入内容：" + first;
+                    return;
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = "切换失败：" + ex.Message;
+        }
+    }
+
+    private async Task SwitchToExtensionScopeAsync(string ext)
+    {
+        if (string.IsNullOrWhiteSpace(ext)) return;
+        if (!ext.StartsWith('.')) ext = "." + ext;
+        var progId = _registry.ResolveProgId(ext);
+        var scope = MenuScope.ForExtension(ext, progId);
+        var label = string.IsNullOrEmpty(progId) ? $"{ext} 文件" : $"{ext} 文件 ({progId})";
+        var option = new ScopeOption(label, scope);
+        TrimCustomOptions();
+        Scopes.Add(option);
+        SelectedScope = option;
+        StatusText = $"已切换到 {label}";
+        await Task.CompletedTask;
+    }
+
+    private void SwitchToBuiltInScope(MenuScope scope, string statusMessage)
+    {
+        var existing = Scopes.FirstOrDefault(s => s.Scope.Equals(scope));
+        if (existing is not null)
+        {
+            SelectedScope = existing;
+        }
+        else
+        {
+            var opt = new ScopeOption(scope.DisplayName, scope);
+            Scopes.Add(opt);
+            SelectedScope = opt;
+        }
+        StatusText = statusMessage;
+    }
+}

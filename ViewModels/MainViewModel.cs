@@ -25,6 +25,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IOperationLog _log;
     private readonly IWin11MenuService _win11;
     private readonly WinVersionService _ver;
+    private readonly IFileTypeService _fileTypes;
 
     public WinVersionService VersionInfo => _ver;
 
@@ -62,6 +63,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isLoading;
 
+    [ObservableProperty]
+    private bool _isDragOver;
+
     public bool IsAdministrator { get; }
 
     /// <summary>Set by App.xaml.cs from --scope= argument; consumed once during startup.</summary>
@@ -70,7 +74,8 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(
         RegistryService registry, MenuParserService parser, IconService icons,
         RegistryWriteService writer, IBackupService backup, IOperationLog log,
-        IWin11MenuService win11, WinVersionService ver) {
+        IWin11MenuService win11, WinVersionService ver,
+        IFileTypeService fileTypes) {
         _registry = registry;
         _parser = parser;
         _icons = icons;
@@ -79,6 +84,7 @@ public partial class MainViewModel : ObservableObject
         _log = log;
         _win11 = win11;
         _ver = ver;
+        _fileTypes = fileTypes;
 
         PreviewView = CollectionViewSource.GetDefaultView(MenuItems);
         PreviewView.Filter = obj => obj is MenuItemViewModel m && (_showExtended || !m.IsExtended);
@@ -127,22 +133,6 @@ public partial class MainViewModel : ObservableObject
     private void SelectPreviewItem(MenuItemViewModel? item)
     {
         if (item is not null) SelectedItem = item;
-    }
-
-    [RelayCommand]
-    private async Task LoadCustomExtensionAsync()
-    {
-        var ext = (CustomExtensionInput ?? string.Empty).Trim();
-        if (string.IsNullOrEmpty(ext)) return;
-        if (!ext.StartsWith('.')) ext = "." + ext;
-        var progId = _registry.ResolveProgId(ext);
-        var scope = MenuScope.ForExtension(ext, progId);
-        var label = string.IsNullOrEmpty(progId) ? $"{ext} 文件" : $"{ext} 文件 ({progId})";
-        var option = new ScopeOption(label, scope);
-        TrimCustomOptions();
-        Scopes.Add(option);
-        SelectedScope = option;
-        await Task.CompletedTask;
     }
 
     private void TrimCustomOptions()
