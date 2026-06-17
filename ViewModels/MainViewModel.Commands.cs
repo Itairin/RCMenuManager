@@ -1,9 +1,11 @@
+﻿using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using RCMenuManager.Models;
 using RCMenuManager.Helpers;
+using RCMenuManager.Services;
 using RCMenuManager.Views.Dialogs;
 
 namespace RCMenuManager.ViewModels;
@@ -175,5 +177,67 @@ public partial class MainViewModel
             Application.Current.Shutdown();
         await Task.CompletedTask;
         return false;
+    }
+    [RelayCommand]
+    private void ShowBackups()
+    {
+        var owner = Application.Current?.MainWindow;
+        var vm = new BackupDialogViewModel(_backup, _log, BackupService.DefaultBackupDir())
+        {
+            OnRestoreRequested = HandleRestoreAsync,
+        };
+        var dlg = new BackupDialog { Owner = owner, DataContext = vm };
+        dlg.ShowDialog();
+    }
+
+    private async Task<bool> HandleRestoreAsync(BackupRecord rec)
+    {
+        foreach (Window w in Application.Current!.Windows)
+            if (w is BackupDialog) { w.Close(); break; }
+
+        if (rec.RegistryPath is null)
+        {
+            StatusText = "无法恢复：该备份没有关联的操作日志记录";
+            return false;
+        }
+
+        var ok = ConfirmDialog.Show(
+            "恢复备份",
+            "将导入备份文件 " + System.IO.Path.GetFileName(rec.FilePath) + "，覆盖当前注册表项：\n" + rec.RegistryPath + "\n\n该操作不可撤销，请确认。",
+            confirmText: "恢复", isDestructive: true);
+        if (!ok) return false;
+
+        var (hive, subKey) = ParseRegistryPath(rec.RegistryPath);
+        if (!await EnsureAdministratorAsync(hive, subKey)) return false;
+
+        try
+        {
+            _backup.Import(rec.FilePath);
+            StatusText = "已恢复 " + rec.VerbName;
+            await RefreshAsync();
+            return true;
+        }
+        catch (System.Exception ex)
+        {
+            StatusText = "恢复失败：" + ex.Message;
+            return false;
+        }
+    }
+
+    private static (RegistryHive hive, string subKey) ParseRegistryPath(string registryPath)
+    {
+        var idx = registryPath.IndexOf('\\');
+        if (idx < 0) return (RegistryHive.CurrentUser, registryPath);
+        var hiveName = registryPath.Substring(0, idx);
+        var subKey = registryPath.Substring(idx + 1);
+        var hive = hiveName switch
+        {
+            "HKCU" => RegistryHive.CurrentUser,
+            "HKLM" => RegistryHive.LocalMachine,
+            "HKCR" => RegistryHive.ClassesRoot,
+            "HKU" => RegistryHive.Users,
+            _ => RegistryHive.CurrentUser,
+        };
+        return (hive, subKey);
     }
 }

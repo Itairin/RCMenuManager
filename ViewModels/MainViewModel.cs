@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -20,6 +21,8 @@ public partial class MainViewModel : ObservableObject
     private readonly MenuParserService _parser;
     private readonly IconService _icons;
     private readonly RegistryWriteService _writer;
+    private readonly IBackupService _backup;
+    private readonly IOperationLog _log;
 
     public ObservableCollection<ScopeOption> Scopes { get; } = new();
     public ObservableCollection<MenuItemViewModel> MenuItems { get; } = new();
@@ -60,12 +63,13 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Set by App.xaml.cs from --scope= argument; consumed once during startup.</summary>
     public string? PendingScopeId { get; set; }
 
-    public MainViewModel(RegistryService registry, MenuParserService parser, IconService icons, RegistryWriteService writer)
-    {
+    public MainViewModel(RegistryService registry, MenuParserService parser, IconService icons, RegistryWriteService writer, IBackupService backup, IOperationLog log) {
         _registry = registry;
         _parser = parser;
         _icons = icons;
         _writer = writer;
+        _backup = backup;
+        _log = log;
 
         PreviewView = CollectionViewSource.GetDefaultView(MenuItems);
         PreviewView.Filter = obj => obj is MenuItemViewModel m && (_showExtended || !m.IsExtended);
@@ -161,3 +165,5 @@ public partial class MainViewModel : ObservableObject
         }
     }
 }
+
+
