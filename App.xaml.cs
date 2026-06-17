@@ -37,6 +37,7 @@ public partial class App : Application
         services.AddSingleton<IOperationLog, OperationLogService>();
         services.AddSingleton<WinVersionService>();
         services.AddSingleton<IWin11MenuService, Win11MenuService>();
+        services.AddSingleton<IFileTypeService, FileTypeService>();
         services.AddSingleton<RegistryWriteService>(sp =>
             new RegistryWriteService(
                 sp.GetRequiredService<IRegistryWriter>(),
