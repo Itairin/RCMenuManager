@@ -8,6 +8,8 @@
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="160" />
             <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
@@ -25,10 +27,12 @@
                  ToolTip="例如 .txt 或 txt" />
         <Button Grid.Column="4" Content="加载" Margin="6,0,0,0" Padding="12,4"
                 Command="{Binding LoadCustomExtensionCommand}" />
-        <Button Grid.Column="5" Content="备份" Margin="6,0,8,0" Padding="12,4"
-                HorizontalAlignment="Right"
+        <Button Grid.Column="5" Content="Win11" Margin="6,0,0,0" Padding="12,4"
+                Command="{Binding ShowWin11Command}"
+                IsEnabled="{Binding VersionInfo.IsWindows11}" />
+        <Button Grid.Column="6" Content="备份" Margin="6,0,0,0" Padding="12,4"
                 Command="{Binding ShowBackupsCommand}" />
-        <Button Grid.Column="6" Content="刷新" Padding="12,4"
+        <Button Grid.Column="8" Content="刷新" Padding="12,4" Margin="6,0,0,0"
                 Command="{Binding RefreshCommand}" />
     </Grid>
 </UserControl>
