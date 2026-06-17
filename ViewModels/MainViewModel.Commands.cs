@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
@@ -240,4 +240,15 @@ public partial class MainViewModel
         };
         return (hive, subKey);
     }
+
+
+    [RelayCommand]
+    private void ShowWin11()
+    {
+        var owner = Application.Current?.MainWindow;
+        var vm = new Win11DialogViewModel(_win11, _ver);
+        var dlg = new Win11Dialog { Owner = owner, DataContext = vm };
+        dlg.ShowDialog();
+    }
 }
+
