@@ -1,0 +1,122 @@
+<Window x:Class="RCMenuManager.Views.Dialogs.PresetDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:RCMenuManager.ViewModels"
+        Title="推荐设置"
+        Width="760" Height="600"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        FontFamily="Segoe UI, Microsoft YaHei UI, sans-serif" FontSize="13">
+    <Window.Resources>
+        <Style x:Key="StatusBadge" TargetType="Border">
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+        </Style>
+    </Window.Resources>
+    <DockPanel Margin="12">
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="导入" Width="80" Height="28" Margin="0,0,8,0"
+                    Command="{Binding ImportCommand}" />
+            <Button Grid.Column="1" Content="导出" Width="80" Height="28" Margin="0,0,8,0"
+                    Command="{Binding ExportCommand}" />
+            <Button Grid.Column="2" Content="刷新" Width="80" Height="28"
+                    Command="{Binding RefreshCommand}" />
+            <CheckBox Grid.Column="4" Content="覆盖已存在的 verb"
+                      IsChecked="{Binding OverwriteExisting}"
+                      VerticalAlignment="Center" />
+        </Grid>
+
+        <Grid DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="{Binding StatusText}"
+                       Foreground="#5F6B7A" FontSize="12"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1" Content="应用选中" Width="100" Height="28" Margin="0,0,8,0"
+                    Command="{Binding ApplySelectedCommand}"
+                    IsEnabled="{Binding HasSelection}" />
+            <Button Grid.Column="2" Content="关闭" Width="80" Height="28"
+                    IsCancel="True" Click="OnCloseClick" />
+        </Grid>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Groups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:PresetGroup}">
+                        <Expander Header="{Binding DisplayName}" IsExpanded="True" Margin="0,0,0,8">
+                            <StackPanel>
+                                <Grid Margin="4,0,4,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="勾选条目后点击「应用选中」"
+                                               Foreground="#5F6B7A" FontSize="12" />
+                                    <Button Grid.Column="1" Content="全选" Width="60" Height="24"
+                                            Command="{Binding DataContext.SelectAllInGroupCommand,
+                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Items}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type vm:PresetItemViewModel}">
+                                            <Border BorderBrush="#E1E3E8" BorderThickness="0,0,0,1"
+                                                    Padding="6,6">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              VerticalAlignment="Top" Margin="0,2,8,0" />
+                                                    <StackPanel Grid.Column="1">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                                            <Border Style="{StaticResource StatusBadge}" Background="#E0E7FF">
+                                                                <TextBlock Text="Shift" FontSize="11" Foreground="#1D4ED8"
+                                                                           Visibility="{Binding IsExtended, Converter={StaticResource BoolToVis}}"/>
+                                                            </Border>
+                                                            <Border Style="{StaticResource StatusBadge}" Background="#FEF3C7">
+                                                                <TextBlock Text="用户" FontSize="11" Foreground="#9A6700"
+                                                                           Visibility="{Binding IsBuiltIn, Converter={StaticResource InvertBoolToVis}}"/>
+                                                            </Border>
+                                                            <Border Style="{StaticResource StatusBadge}" Background="#D1FAE5">
+                                                                <TextBlock Text="已应用" FontSize="11" Foreground="#1F7A3A"
+                                                                           Visibility="{Binding IsApplied, Converter={StaticResource BoolToVis}}"/>
+                                                            </Border>
+                                                            <Border Style="{StaticResource StatusBadge}" Background="#FEE2E2">
+                                                                <TextBlock Text="已存在" FontSize="11" Foreground="#C9211E"
+                                                                           Visibility="{Binding State, Converter={StaticResource StateToExistsVis}}"/>
+                                                            </Border>
+                                                            <Border Style="{StaticResource StatusBadge}" Background="#FEE2E2">
+                                                                <TextBlock Text="错误" FontSize="11" Foreground="#C9211E"
+                                                                           Visibility="{Binding State, Converter={StaticResource StateToErrorVis}}"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding Description}" Foreground="#5F6B7A" FontSize="12" />
+                                                        <TextBlock Text="{Binding CommandPreview}" Foreground="#1F2937" FontSize="11" FontFamily="Consolas, monospace" TextWrapping="Wrap" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Expander>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

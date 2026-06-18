@@ -38,6 +38,7 @@ public partial class App : Application
         services.AddSingleton<WinVersionService>();
         services.AddSingleton<IWin11MenuService, Win11MenuService>();
         services.AddSingleton<IFileTypeService, FileTypeService>();
+        services.AddSingleton<IPresetService, PresetService>();
         services.AddSingleton<RegistryWriteService>(sp =>
             new RegistryWriteService(
                 sp.GetRequiredService<IRegistryWriter>(),

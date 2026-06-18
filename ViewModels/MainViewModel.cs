@@ -26,6 +26,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IWin11MenuService _win11;
     private readonly WinVersionService _ver;
     private readonly IFileTypeService _fileTypes;
+    private readonly IPresetService _presets;
 
     public WinVersionService VersionInfo => _ver;
 
@@ -75,7 +76,7 @@ public partial class MainViewModel : ObservableObject
         RegistryService registry, MenuParserService parser, IconService icons,
         RegistryWriteService writer, IBackupService backup, IOperationLog log,
         IWin11MenuService win11, WinVersionService ver,
-        IFileTypeService fileTypes) {
+        IFileTypeService fileTypes, IPresetService presets) {
         _registry = registry;
         _parser = parser;
         _icons = icons;
@@ -85,6 +86,7 @@ public partial class MainViewModel : ObservableObject
         _win11 = win11;
         _ver = ver;
         _fileTypes = fileTypes;
+        _presets = presets;
 
         PreviewView = CollectionViewSource.GetDefaultView(MenuItems);
         PreviewView.Filter = obj => obj is MenuItemViewModel m && (_showExtended || !m.IsExtended);

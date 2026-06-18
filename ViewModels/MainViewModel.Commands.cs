@@ -256,6 +256,15 @@ public partial class MainViewModel
         dlg.ShowDialog();
     }
 
+    [RelayCommand]
+    private void ShowPresets()
+    {
+        var owner = Application.Current?.MainWindow;
+        var vm = new PresetDialogViewModel(_presets);
+        var dlg = new PresetDialog { Owner = owner, DataContext = vm };
+        dlg.ShowDialog();
+    }
+
     public async Task OnFileDroppedAsync(string[] paths)
     {
         IsDragOver = false;

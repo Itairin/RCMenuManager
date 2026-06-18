@@ -10,6 +10,7 @@
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
@@ -32,7 +33,9 @@
                 IsEnabled="{Binding VersionInfo.IsWindows11}" />
         <Button Grid.Column="6" Content="备份" Margin="6,0,0,0" Padding="12,4"
                 Command="{Binding ShowBackupsCommand}" />
-        <Button Grid.Column="8" Content="刷新" Padding="12,4" Margin="6,0,0,0"
+        <Button Grid.Column="7" Content="推荐" Margin="6,0,0,0" Padding="12,4"
+                Command="{Binding ShowPresetsCommand}" />
+        <Button Grid.Column="9" Content="刷新" Padding="12,4" Margin="6,0,0,0"
                 Command="{Binding RefreshCommand}" />
     </Grid>
 </UserControl>
