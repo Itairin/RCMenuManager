@@ -36,7 +36,13 @@ public sealed class RegistryWriteService
 
     public void Enable(RegistryHive hive, string subKey, string scopeId, string verbName) =>
         Run(hive, subKey, scopeId, verbName, "Enable", () =>
-            _writer.DeleteValue(hive, subKey, "ProgrammaticAccessOnly"));
+        {
+            // Clear both "hidden from Explorer" mechanisms. The legacy
+            // LegacyDisable flag is ignored by modern Explorers but still
+            // respected by some shell extensions, so it has to go too.
+            _writer.DeleteValue(hive, subKey, "ProgrammaticAccessOnly");
+            _writer.DeleteValue(hive, subKey, "LegacyDisable");
+        });
 
     public void Delete(RegistryHive hive, string subKey, string scopeId, string verbName) =>
         Run(hive, subKey, scopeId, verbName, "Delete", () =>

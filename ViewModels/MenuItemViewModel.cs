@@ -65,6 +65,11 @@ public partial class MenuItemViewModel : ObservableObject
     public bool IsExtended => Model.IsExtended;
     public bool IsProgrammaticOnly => Model.IsProgrammaticOnly;
     public bool IsLegacyDisabled => Model.IsLegacyDisabled;
+    /// <summary>True when the verb is hidden from the Explorer context menu,
+    /// whether it was disabled via the modern <c>ProgrammaticAccessOnly</c>
+    /// or the legacy <c>LegacyDisable</c> flag. Used by the Enable/Disable
+    /// toggle so it covers both mechanisms.</summary>
+    public bool IsDisabled => IsProgrammaticOnly || IsLegacyDisabled;
     public bool IsSystemVerb => Model.IsSystemVerb;
     public bool HasChildren => Children.Count > 0;
     public bool IsTop => string.Equals(Model.Position, "Top", StringComparison.OrdinalIgnoreCase);

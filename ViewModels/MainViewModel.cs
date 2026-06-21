@@ -33,6 +33,10 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<ScopeOption> Scopes { get; } = new();
     public ObservableCollection<MenuItemViewModel> MenuItems { get; } = new();
     public EditPanelViewModel EditPanel { get; } = new();
+    /// <summary>Read-only shell extensions (shellex\ContextMenuHandlers) for
+    /// the current scope. Shown in the preview popup so the user sees the
+    /// same options Explorer would, but they can't be edited from this app.</summary>
+    public IReadOnlyList<ShellExtensionInfo> ShellExtensions { get; private set; } = Array.Empty<ShellExtensionInfo>();
     /// <summary>Filtered view used by the Preview tab to hide Extended items by default.</summary>
     public ICollectionView PreviewView { get; }
 
@@ -149,11 +153,14 @@ public partial class MainViewModel : ObservableObject
         IsLoading = true;
         StatusText = $"正在加载 {scope.DisplayName} ...";
         MenuItems.Clear();
+        ShellExtensions = Array.Empty<ShellExtensionInfo>();
         try
         {
             var items = await Task.Run(() => _parser.GetMenuItems(scope));
+            var extensions = await Task.Run(() => _parser.GetShellExtensionHandlers(scope));
             foreach (var item in items)
                 MenuItems.Add(new MenuItemViewModel(item, _icons));
+            ShellExtensions = extensions;
             StatusText = $"{scope.DisplayName} · 共 {MenuItems.Count} 项" + (IsAdministrator ? "" : " · 当前未提权 (asInvoker)");
         }
         catch (Exception ex)

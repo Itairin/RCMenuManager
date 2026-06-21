@@ -1,54 +1,64 @@
-<Window x:Class="RCMenuManager.Views.Dialogs.AddVerbDialog"
+﻿<Window x:Class="RCMenuManager.Views.Dialogs.AddVerbDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="新增菜单项" Width="520" SizeToContent="Height"
+        Title="新增菜单项" Width="560" SizeToContent="Height"
+        Background="{StaticResource WindowBackground}"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False"
-        FontFamily="Segoe UI, Microsoft YaHei UI, sans-serif" FontSize="13">
-    <Grid Margin="16">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="120" />
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+        FontFamily="Segoe UI Variable, Segoe UI, Microsoft YaHei UI, sans-serif" FontSize="13">
+    <Border Padding="20">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Grid.Column="0" Text="Verb 名 (键名)" VerticalAlignment="Center" Margin="0,0,8,8" />
-        <TextBox   Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" x:Name="VerbNameBox" Margin="0,0,0,8" ToolTip="注册表 key 的名称，例如 OpenWithVSCode" />
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Verb 名 (键名)" Style="{StaticResource FieldLabel}" Margin="0,0,12,10" />
+            <TextBox   Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" x:Name="VerbNameBox" Margin="0,0,0,10"
+                       ToolTip="注册表 key 的名称，例如 OpenWithVSCode" />
 
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="显示名" VerticalAlignment="Center" Margin="0,0,8,8" />
-        <TextBox   Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="DisplayNameBox" Margin="0,0,0,8" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="显示名" Style="{StaticResource FieldLabel}" Margin="0,0,12,10" />
+            <TextBox   Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="DisplayNameBox" Margin="0,0,0,10" />
 
-        <TextBlock Grid.Row="2" Grid.Column="0" Text="命令" VerticalAlignment="Center" Margin="0,0,8,8" />
-        <TextBox   Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" x:Name="CommandBox" Margin="0,0,0,8" FontFamily="Consolas, monospace" />
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="命令" Style="{StaticResource FieldLabel}" Margin="0,0,12,10" />
+            <TextBox   Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" x:Name="CommandBox" Margin="0,0,0,10"
+                       FontFamily="Cascadia Mono, Consolas, monospace" />
 
-        <TextBlock Grid.Row="3" Grid.Column="0" Text="图标" VerticalAlignment="Center" Margin="0,0,8,8" />
-        <TextBox   Grid.Row="3" Grid.Column="1" x:Name="IconBox" Margin="0,0,6,8" FontFamily="Consolas, monospace" />
-        <Button    Grid.Row="3" Grid.Column="2" Content="浏览…" Width="76" Click="BrowseIcon_Click" Margin="0,0,0,8" />
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="图标" Style="{StaticResource FieldLabel}" Margin="0,0,12,10" />
+            <TextBox   Grid.Row="3" Grid.Column="1" x:Name="IconBox" Margin="0,0,8,10"
+                       FontFamily="Cascadia Mono, Consolas, monospace" />
+            <Button    Grid.Row="3" Grid.Column="2" Content="浏览…" MinWidth="84" Click="BrowseIcon_Click" Margin="0,0,0,10" />
 
-        <CheckBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" x:Name="ExtendedBox" Content="仅在 Shift+右键 时显示 (Extended)" Margin="0,0,0,8" />
+            <CheckBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" x:Name="ExtendedBox"
+                      Content="仅在 Shift+右键 时显示 (Extended)" Margin="0,0,0,10" />
 
-        <TextBlock Grid.Row="5" Grid.Column="0" Text="位置" VerticalAlignment="Center" Margin="0,0,8,8" />
-        <StackPanel Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,8">
-            <RadioButton x:Name="PositionDefault" Content="默认" GroupName="pos" IsChecked="True" Margin="0,0,12,0" />
-            <RadioButton x:Name="PositionTop" Content="置顶 (Top)" GroupName="pos" Margin="0,0,12,0" />
-            <RadioButton x:Name="PositionBottom" Content="置底 (Bottom)" GroupName="pos" />
-        </StackPanel>
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="位置" Style="{StaticResource FieldLabel}" Margin="0,0,12,10" />
+            <StackPanel Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,10">
+                <RadioButton x:Name="PositionDefault" Content="默认" GroupName="pos" IsChecked="True" Margin="0,0,16,0" />
+                <RadioButton x:Name="PositionTop" Content="置顶" GroupName="pos" Margin="0,0,16,0" />
+                <RadioButton x:Name="PositionBottom" Content="置底" GroupName="pos" />
+            </StackPanel>
 
-        <CheckBox Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" x:Name="ParentOnlyBox" Content="作为父级菜单（不写命令，自动建 \shell 子键）" Margin="0,0,0,8" Checked="ParentOnlyBox_Changed" Unchecked="ParentOnlyBox_Changed" />
+            <CheckBox Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" x:Name="ParentOnlyBox"
+                      Content="作为父级菜单（不写命令，自动建 \shell 子键）" Margin="0,0,0,10"
+                      Checked="ParentOnlyBox_Changed" Unchecked="ParentOnlyBox_Changed" />
 
-        <StackPanel Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-            <TextBlock x:Name="ErrorText" Foreground="#9A1F1B" VerticalAlignment="Center" Margin="0,0,12,0" />
-            <Button x:Name="CancelButton" Content="取消" Width="84" Height="28" Margin="0,0,8,0" Click="CancelButton_Click" />
-            <Button x:Name="OkButton" Content="确定" Width="84" Height="28" Click="OkButton_Click" IsDefault="True" />
-        </StackPanel>
-    </Grid>
+            <StackPanel Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                <TextBlock x:Name="ErrorText" Foreground="{StaticResource DangerBrush}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <Button x:Name="CancelButton" Content="取消" MinWidth="92" Margin="0,0,10,0" Click="CancelButton_Click" />
+                <Button x:Name="OkButton" Content="确定" MinWidth="92" Style="{StaticResource AccentButton}"
+                        Click="OkButton_Click" IsDefault="True" />
+            </StackPanel>
+        </Grid>
+    </Border>
 </Window>

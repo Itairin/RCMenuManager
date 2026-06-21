@@ -1,17 +1,32 @@
-<Window x:Class="RCMenuManager.Views.Dialogs.ConfirmDialog"
+﻿<Window x:Class="RCMenuManager.Views.Dialogs.ConfirmDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="确认" SizeToContent="WidthAndHeight"
+        Background="{StaticResource WindowBackground}"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize" ShowInTaskbar="False"
-        FontFamily="Segoe UI, Microsoft YaHei UI, sans-serif" FontSize="13">
-    <Border Padding="20" MinWidth="380">
+        FontFamily="Segoe UI Variable, Segoe UI, Microsoft YaHei UI, sans-serif" FontSize="13">
+    <Border Padding="24" MinWidth="420">
         <StackPanel>
-            <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-            <TextBlock x:Name="BodyText" TextWrapping="Wrap" Margin="0,0,0,16" Foreground="#333" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <Border Width="36" Height="36" CornerRadius="18" Background="{StaticResource WarnSubtleBrush}">
+                    <Path Width="18" Height="18"
+                          Stroke="{StaticResource WarnBrush}" StrokeThickness="1.6"
+                          StrokeStartLineCap="Round" StrokeLineJoin="Round" Fill="Transparent"
+                          Data="M9,2 L17,15 H1 Z M9,7 V11 M9,13 V13.1"
+                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <TextBlock x:Name="HeaderText" FontSize="16" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextBrush}"
+                           VerticalAlignment="Center" Margin="12,0,0,0" />
+            </StackPanel>
+            <TextBlock x:Name="BodyText" TextWrapping="Wrap" Margin="0,0,0,18"
+                       Foreground="{StaticResource MutedTextBrush}" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button x:Name="CancelButton" Content="取消" Width="84" Height="28" Margin="0,0,8,0" Click="CancelButton_Click" />
-                <Button x:Name="ConfirmButton" Content="确定" Width="84" Height="28" Click="ConfirmButton_Click" IsDefault="True" />
+                <Button x:Name="CancelButton" Content="取消" MinWidth="92" Margin="0,0,10,0" Click="CancelButton_Click" />
+                <Button x:Name="ConfirmButton" Content="确定" MinWidth="92"
+                        Style="{StaticResource AccentButton}"
+                        Click="ConfirmButton_Click" IsDefault="True" />
             </StackPanel>
         </StackPanel>
     </Border>

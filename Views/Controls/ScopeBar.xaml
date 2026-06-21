@@ -1,41 +1,107 @@
-<UserControl x:Class="RCMenuManager.Views.Controls.ScopeBar"
+﻿<UserControl x:Class="RCMenuManager.Views.Controls.ScopeBar"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Grid Margin="12">
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="IconStroke" Color="#475569" />
+        <SolidColorBrush x:Key="IconStrokeHover" Color="#1D4ED8" />
+
+        <Style x:Key="ToolButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </UserControl.Resources>
+    <Grid Margin="14,12">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="320" />
+            <ColumnDefinition Width="16" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="160" />
             <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <TextBlock Grid.Column="0" Text="作用域" FontWeight="SemiBold" Foreground="#1F2937"
-                   VerticalAlignment="Center" />
-        <ComboBox Grid.Column="1" Margin="8,0,0,0"
+
+        <TextBlock Grid.Column="0" Text="作用域"
+                   Style="{StaticResource FieldLabel}"
+                   Margin="0,0,8,0" />
+        <ComboBox Grid.Column="1"
                   ItemsSource="{Binding Scopes}"
                   SelectedItem="{Binding SelectedScope, Mode=TwoWay}"
-                  DisplayMemberPath="Label" />
-        <TextBlock Grid.Column="2" Text="自定义扩展名" FontWeight="SemiBold" Foreground="#1F2937"
-                   Margin="20,0,0,0" VerticalAlignment="Center" />
-        <TextBox Grid.Column="3" Margin="8,0,0,0"
+                  DisplayMemberPath="Label"
+                  ToolTip="选择要管理的右键菜单作用域" />
+
+        <TextBlock Grid.Column="3" Text="扩展名"
+                   Style="{StaticResource FieldLabel}"
+                   Margin="0,0,8,0" />
+        <TextBox Grid.Column="4"
                  Text="{Binding CustomExtensionInput, UpdateSourceTrigger=PropertyChanged}"
-                 VerticalContentAlignment="Center"
                  ToolTip="例如 .txt 或 txt" />
-        <Button Grid.Column="4" Content="加载" Margin="6,0,0,0" Padding="12,4"
-                Command="{Binding LoadCustomExtensionCommand}" />
-        <Button Grid.Column="5" Content="Win11" Margin="6,0,0,0" Padding="12,4"
+        <Button Grid.Column="5" Content="加载"
+                Style="{StaticResource ToolButton}" Margin="6,0,0,0"
+                Command="{Binding LoadCustomExtensionCommand}"
+                ToolTip="按扩展名加载该文件类型的菜单" />
+
+        <Button Grid.Column="7"
+                Style="{StaticResource ToolButton}" Margin="6,0,0,0"
                 Command="{Binding ShowWin11Command}"
-                IsEnabled="{Binding VersionInfo.IsWindows11}" />
-        <Button Grid.Column="6" Content="备份" Margin="6,0,0,0" Padding="12,4"
-                Command="{Binding ShowBackupsCommand}" />
-        <Button Grid.Column="7" Content="推荐" Margin="6,0,0,0" Padding="12,4"
-                Command="{Binding ShowPresetsCommand}" />
-        <Button Grid.Column="9" Content="刷新" Padding="12,4" Margin="6,0,0,0"
-                Command="{Binding RefreshCommand}" />
+                IsEnabled="{Binding VersionInfo.IsWindows11}"
+                ToolTip="Win11 新菜单设置（仅在 Windows 11 上可用）">
+            <StackPanel Orientation="Horizontal">
+                <Path Width="14" Height="14"
+                      Stroke="{StaticResource IconStroke}" StrokeThickness="1.4"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      Data="M2,3 H12 V13 H2 Z M2,3 L7,8 L12,3"
+                      SnapsToDevicePixels="True" />
+                <TextBlock Text="Win11" Margin="6,0,0,0" />
+            </StackPanel>
+        </Button>
+        <Button Grid.Column="8"
+                Style="{StaticResource ToolButton}" Margin="6,0,0,0"
+                Command="{Binding ShowBackupsCommand}"
+                ToolTip="查看 / 还原备份与操作日志">
+            <StackPanel Orientation="Horizontal">
+                <Path Width="14" Height="14"
+                      Stroke="{StaticResource IconStroke}" StrokeThickness="1.4"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      Data="M2,4 H12 M2,4 V13 H12 V4 M5,7 H9"
+                      SnapsToDevicePixels="True" />
+                <TextBlock Text="备份" Margin="6,0,0,0" />
+            </StackPanel>
+        </Button>
+        <Button Grid.Column="9"
+                Style="{StaticResource ToolButton}" Margin="6,0,0,0"
+                Command="{Binding ShowPresetsCommand}"
+                ToolTip="一键应用 / 管理推荐预设">
+            <StackPanel Orientation="Horizontal">
+                <Path Width="14" Height="14"
+                      Stroke="{StaticResource IconStroke}" StrokeThickness="1.4"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      Fill="Transparent"
+                      Data="M7,2 L8.5,5.5 L12.5,6 L9.5,8.7 L10.3,12.5 L7,10.7 L3.7,12.5 L4.5,8.7 L1.5,6 L5.5,5.5 Z"
+                      SnapsToDevicePixels="True" />
+                <TextBlock Text="推荐" Margin="6,0,0,0" />
+            </StackPanel>
+        </Button>
+        <Button Grid.Column="10"
+                Style="{StaticResource AccentButton}" Margin="10,0,0,0"
+                Command="{Binding RefreshCommand}"
+                ToolTip="重新读取注册表并刷新列表">
+            <StackPanel Orientation="Horizontal">
+                <Path Width="14" Height="14"
+                      Stroke="{StaticResource OnAccentBrush}" StrokeThickness="1.4"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      Fill="Transparent"
+                      Data="M12,3 V7 H8 M12,7 A5,5 0 1 0 11,11"
+                      SnapsToDevicePixels="True" />
+                <TextBlock Text="刷新" Margin="6,0,0,0" />
+            </StackPanel>
+        </Button>
     </Grid>
 </UserControl>

@@ -8,7 +8,7 @@
         <conv:StringNotEmptyToVisibilityConverter x:Key="StringToVis" />
 
         <HierarchicalDataTemplate DataType="{x:Type vm:MenuItemViewModel}" ItemsSource="{Binding Children}">
-            <Grid Margin="0,2">
+            <Grid Margin="0,1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="20" />
                     <ColumnDefinition Width="*" />
@@ -19,20 +19,22 @@
                        Source="{Binding Icon}"
                        SnapsToDevicePixels="True" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
-                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"
+                               Foreground="{StaticResource TextBrush}" />
                     <TextBlock Text="{Binding VerbName}" Margin="8,0,0,0"
-                               Foreground="#5F6B7A"
+                               Foreground="{StaticResource TertiaryTextBrush}"
                                FontSize="11" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
-                    <Border Visibility="{Binding Flags, Converter={StaticResource StringToVis}}"
-                            Background="#EEF2F8" CornerRadius="3" Padding="6,1"
-                            Margin="0,0,4,0">
-                        <TextBlock Text="{Binding Flags}" Foreground="#3B4A60" FontSize="11" />
+                    <Border Style="{StaticResource Badge}"
+                            Visibility="{Binding Flags, Converter={StaticResource StringToVis}}"
+                            Background="{StaticResource SubtleBackground}">
+                        <TextBlock Text="{Binding Flags}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
                     </Border>
-                    <Border Visibility="{Binding OriginText, Converter={StaticResource StringToVis}}"
-                            Background="#F1ECFD" CornerRadius="3" Padding="6,1">
-                        <TextBlock Text="{Binding OriginText}" Foreground="#5B27C9" FontSize="11" />
+                    <Border Style="{StaticResource Badge}"
+                            Visibility="{Binding OriginText, Converter={StaticResource StringToVis}}"
+                            Background="{StaticResource InfoSubtleBrush}">
+                        <TextBlock Text="{Binding OriginText}" Foreground="{StaticResource InfoBrush}" FontSize="11" />
                     </Border>
                 </StackPanel>
             </Grid>
@@ -44,32 +46,48 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <Border Grid.Row="0" BorderBrush="#E1E3E8" BorderThickness="0,0,0,1" Padding="12,10">
+        <Border Grid.Row="0" Style="{StaticResource SectionDivider}" Padding="14,12">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="菜单项" FontWeight="SemiBold" FontSize="13" Foreground="#1F2937" />
-                <TextBlock Margin="10,0,0,0" Foreground="#5F6B7A" FontSize="12"
-                           Text="{Binding MenuItems.Count, StringFormat=共 {0} 项}" />
-                <TextBlock Margin="10,0,0,0" Foreground="#5F6B7A" FontSize="12"
-                           Text="加载中..."
-                           Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}" />
-            </StackPanel>
-                <Button Grid.Column="1" Content="+ 新增菜单项" Padding="10,4" Height="26"
-                        Command="{Binding AddRootCommand}" />
+                    <TextBlock Text="菜单项" Style="{StaticResource TitleText}" />
+                    <Border Style="{StaticResource Badge}" Background="{StaticResource SubtleBackground}" Margin="10,0,0,0">
+                        <TextBlock Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                                   Text="{Binding MenuItems.Count, StringFormat=共 {0} 项}" />
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Margin="10,0,0,0"
+                                Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
+                        <Ellipse Width="6" Height="6" Fill="{StaticResource AccentBrush}" VerticalAlignment="Center" />
+                        <TextBlock Margin="6,0,0,0" Foreground="{StaticResource MutedTextBrush}" FontSize="12" Text="加载中..." />
+                    </StackPanel>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Style="{StaticResource AccentButton}"
+                        Padding="12,6" MinHeight="30"
+                        Command="{Binding AddRootCommand}"
+                        ToolTip="新增一个根菜单项">
+                    <StackPanel Orientation="Horizontal">
+                        <Path Width="10" Height="10"
+                              Stroke="{StaticResource OnAccentBrush}" StrokeThickness="1.6"
+                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              Data="M5,1 V9 M1,5 H9" />
+                        <TextBlock Text="新增" Margin="8,0,0,0" />
+                    </StackPanel>
+                </Button>
             </Grid>
         </Border>
         <TreeView Grid.Row="1"
                   x:Name="Tree"
                   ItemsSource="{Binding MenuItems}"
                   BorderThickness="0"
+                  Padding="10,8,6,8"
                   Background="Transparent"
                   SelectedItemChanged="Tree_SelectedItemChanged">
             <TreeView.ItemContainerStyle>
-                <Style TargetType="TreeViewItem">
+                <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
                     <Setter Property="IsExpanded" Value="True" />
                 </Style>
             </TreeView.ItemContainerStyle>

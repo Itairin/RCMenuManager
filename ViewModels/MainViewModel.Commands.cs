@@ -62,7 +62,10 @@ public partial class MainViewModel
         try
         {
             EditPanel.ErrorMessage = null;
-            if (item.IsProgrammaticOnly)
+            // Toggle direction is driven by IsDisabled so a verb that was
+            // disabled via LegacyDisable (no ProgrammaticAccessOnly) still
+            // gets fully re-enabled on the next click.
+            if (item.IsDisabled)
                 _writer.Enable(item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName);
             else
                 _writer.Disable(item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName);

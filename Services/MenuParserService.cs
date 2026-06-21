@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Win32;
@@ -78,6 +78,116 @@ public class MenuParserService
             list.Add(ParseVerb(verbKey, sub, entry, depth: 0));
         }
         return SortByPosition(list);
+    }
+
+    /// <summary>
+    /// Enumerates the <c>shellex\ContextMenuHandlers</c> entries registered for
+    /// the given scope. These are DLLs that contribute menu items dynamically
+    /// (e.g. "授予访问权限", "包含到库中", "发送到", "Share with"). We resolve each
+    /// CLSID against HKCR\CLSID to surface a friendly name + DLL path.
+    /// </summary>
+    public IReadOnlyList<ShellExtensionInfo> GetShellExtensionHandlers(MenuScope scope)
+    {
+        var paths = GetShellExtensionQueryPaths(scope);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var results = new List<ShellExtensionInfo>();
+
+        foreach (var path in paths)
+        {
+            using var key = _registry.OpenRead(path.Hive, path.SubKey);
+            if (key is null) continue;
+
+            foreach (var sub in key.GetSubKeyNames())
+            {
+                if (seen.Contains(sub)) continue;
+                seen.Add(sub);
+
+                using var handlerKey = key.OpenSubKey(sub, writable: false);
+                var clsid = handlerKey?.GetValue(string.Empty) as string;
+                if (string.IsNullOrEmpty(clsid)) continue;
+
+                var (name, dll) = ResolveClsid(clsid);
+                results.Add(new ShellExtensionInfo
+                {
+                    DisplayName = string.IsNullOrEmpty(name) ? sub : name,
+                    Clsid = clsid,
+                    DllPath = dll,
+                    ScopeId = scope.ScopeId,
+                    SourceKey = sub,
+                });
+            }
+        }
+
+        return results;
+    }
+
+    private (string name, string dll) ResolveClsid(string clsid)
+    {
+        try
+        {
+            using var clsidKey = _registry.OpenRead(RegistryHive.ClassesRoot, $@"CLSID\{clsid}");
+            var name = clsidKey?.GetValue(string.Empty) as string ?? string.Empty;
+            var dll = clsidKey?.OpenSubKey("InprocServer32")?.GetValue(string.Empty) as string ?? string.Empty;
+            return (name, dll);
+        }
+ catch
+        {
+            return (string.Empty, string.Empty);
+        }
+    }
+
+    private static IReadOnlyList<RegistryQueryEntry> GetShellExtensionQueryPaths(MenuScope scope)
+    {
+        var list = new List<RegistryQueryEntry>();
+        switch (scope.Type)
+        {
+            case ScopeType.AllFiles:
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\*\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\*\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"*\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\AllFilesystemObjects\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\AllFilesystemObjects\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"AllFilesystemObjects\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
+                break;
+            case ScopeType.Folder:
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\Directory\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\Directory\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"Directory\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\Folder\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\Folder\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"Folder\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
+                break;
+            case ScopeType.FolderBackground:
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\Directory\Background\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\Directory\Background\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"Directory\Background\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
+                break;
+            case ScopeType.Drive:
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\Drive\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\Drive\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"Drive\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
+                break;
+            case ScopeType.Desktop:
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\DesktopBackground\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\DesktopBackground\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"DesktopBackground\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
+                break;
+            case ScopeType.FileExtension:
+                if (string.IsNullOrEmpty(scope.Extension)) break;
+                var ext = scope.Extension!;
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, $@"Software\Classes\{ext}\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, $@"SOFTWARE\Classes\{ext}\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, $@"{ext}\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
+                if (!string.IsNullOrEmpty(scope.ProgId))
+                {
+                    var progId = scope.ProgId!;
+                    list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, $@"Software\Classes\{progId}\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
+                    list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, $@"SOFTWARE\Classes\{progId}\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
+                    list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, $@"{progId}\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
+                }
+                break;
+        }
+        return list;
     }
 
     /// <summary>

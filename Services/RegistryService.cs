@@ -27,6 +27,11 @@ public class RegistryService
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\*\shell", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\*\shell", RegistryHiveOrigin.LocalMachine));
                 list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"*\shell", RegistryHiveOrigin.ClassesRoot));
+                // Explorer also shows items registered under AllFilesystemObjects
+                // when right-clicking a file (e.g. Work Folders, Offline Files).
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\AllFilesystemObjects\shell", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\AllFilesystemObjects\shell", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"AllFilesystemObjects\shell", RegistryHiveOrigin.ClassesRoot));
                 break;
 
             case ScopeType.AllFilesystemObjects:
@@ -39,6 +44,11 @@ public class RegistryService
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\Directory\shell", RegistryHiveOrigin.LocalMachine));
                 list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"Directory\shell", RegistryHiveOrigin.ClassesRoot));
+                // Folder is the legacy class; Windows still uses it for the built-in
+                // "open/explore/opennew*" verbs that show on every folder.
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\Folder\shell", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\Folder\shell", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"Folder\shell", RegistryHiveOrigin.ClassesRoot));
                 break;
 
             case ScopeType.FolderBackground:
@@ -67,12 +77,22 @@ public class RegistryService
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, $@"Software\Classes\{ext}\shell", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, $@"SOFTWARE\Classes\{ext}\shell", RegistryHiveOrigin.LocalMachine));
                 list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, $@"{ext}\shell", RegistryHiveOrigin.ClassesRoot));
+                // SystemFileAssociations\<ext>\shell hosts the "open"/"edit" entries
+                // Explorer uses for arbitrary files of a type.
+                list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, $@"Software\Classes\SystemFileAssociations\{ext}\shell", RegistryHiveOrigin.CurrentUser));
+                list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, $@"SOFTWARE\Classes\SystemFileAssociations\{ext}\shell", RegistryHiveOrigin.LocalMachine));
+                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, $@"SystemFileAssociations\{ext}\shell", RegistryHiveOrigin.ClassesRoot));
                 if (!string.IsNullOrEmpty(scope.ProgId))
                 {
                     var progId = scope.ProgId!;
                     list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, $@"Software\Classes\{progId}\shell", RegistryHiveOrigin.CurrentUser));
                     list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, $@"SOFTWARE\Classes\{progId}\shell", RegistryHiveOrigin.LocalMachine));
                     list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, $@"{progId}\shell", RegistryHiveOrigin.ClassesRoot));
+                    // SystemFileAssociations\<progId>\shell is where most built-in
+                    // per-type handlers register.
+                    list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, $@"Software\Classes\SystemFileAssociations\{progId}\shell", RegistryHiveOrigin.CurrentUser));
+                    list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, $@"SOFTWARE\Classes\SystemFileAssociations\{progId}\shell", RegistryHiveOrigin.LocalMachine));
+                    list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, $@"SystemFileAssociations\{progId}\shell", RegistryHiveOrigin.ClassesRoot));
                 }
                 break;
         }
