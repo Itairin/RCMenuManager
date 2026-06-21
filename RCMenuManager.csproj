@@ -14,6 +14,21 @@
     <Description>A Windows context menu manager for Win10/Win11.</Description>
     <LangVersion>latest</LangVersion>
     <PlatformTarget>x64</PlatformTarget>
+    <Company>RCMenuManager</Company>
+    <Product>RCMenuManager</Product>
+    <Copyright>Copyright (c) 2026 RCMenuManager Contributors</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/your-name/RCMenuManager</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/your-name/RCMenuManager.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <NeutralLanguage>zh-CN</NeutralLanguage>
+    <ApplicationIcon></ApplicationIcon>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

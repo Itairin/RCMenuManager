@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build Release Artifact
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Publish (framework-dependent)
+        run: |
+          dotnet publish RCMenuManager.csproj `
+            -c Release -r win-x64 `
+            --self-contained false `
+            -p:PublishSingleFile=true `
+            -o publish/framework
+
+      - name: Publish (self-contained)
+        run: |
+          dotnet publish RCMenuManager.csproj `
+            -c Release -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o publish/self-contained
+
+      - name: Package archives
+        run: |
+          Compress-Archive -Path publish/framework/* -DestinationPath RCMenuManager-win-x64-framework.zip -Force
+          Compress-Archive -Path publish/self-contained/* -DestinationPath RCMenuManager-win-x64-self-contained.zip -Force
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RCMenuManager-${{ github.ref_name }}
+          path: |
+            RCMenuManager-win-x64-framework.zip
+            RCMenuManager-win-x64-self-contained.zip
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            RCMenuManager-win-x64-framework.zip
+            RCMenuManager-win-x64-self-contained.zip
+          generate_release_notes: true

@@ -129,7 +129,7 @@ public class PresetServiceTests : IDisposable
         var svc = MakeService("{\"version\":\"1.0\",\"presets\":[]}");
         svc.SaveUserPreset(new PresetItem { Scope = "Folder", VerbName = "v", DisplayName = "A", Command = "a", IsBuiltIn = false });
         svc.SaveUserPreset(new PresetItem { Scope = "Folder", VerbName = "v", DisplayName = "B", Command = "b", IsBuiltIn = false });
-        Assert.Equal(1, svc.Load().Presets.Count);
+        Assert.Single(svc.Load().Presets);
         Assert.Equal("B", svc.Load().Presets[0].DisplayName);
     }
 

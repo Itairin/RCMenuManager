@@ -1,9 +1,39 @@
+# ===== Build output =====
 bin/
 obj/
+out/
+publish/
+
+# ===== IDE / tooling =====
 .vs/
-.tmp_screens/
-.smoke/
+.vscode/
+.idea/
 *.user
-packages/
+*.suo
+*.userosscache
+*.sln.docstates
+
+# ===== Test / coverage =====
 TestResults/
+*.coverage
+*.coveragexml
+coverage*.xml
+coverage/
+
+# ===== NuGet =====
+packages/
+*.nupkg
+*.snupkg
+
+# ===== Workspace scratch =====
+.smoke/
+.tmp_screens/
 .tmp_append.md
+*.log
+crash.log
+
+# ===== OS noise =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
