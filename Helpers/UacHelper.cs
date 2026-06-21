@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Reflection;
 using System.Security.Principal;
 
 namespace RCMenuManager.Helpers;
@@ -32,7 +31,9 @@ public static class UacHelper
     /// </summary>
     public static bool RelaunchAsAdmin(string? arguments = null)
     {
-        var entry = Environment.ProcessPath ?? Assembly.GetEntryAssembly()?.Location;
+        // Environment.ProcessPath gives the host .exe (works under PublishSingleFile
+        // unlike Assembly.Location, which returns empty for embedded assemblies).
+        var entry = Environment.ProcessPath;
         if (string.IsNullOrEmpty(entry))
             return false;
 

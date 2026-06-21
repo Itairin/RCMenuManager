@@ -9,7 +9,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>RCMenuManager</AssemblyName>
     <RootNamespace>RCMenuManager</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.6.0</Version>
+    <AssemblyVersion>0.6.0.0</AssemblyVersion>
+    <FileVersion>0.6.0.0</FileVersion>
+    <InformationalVersion>0.6.0</InformationalVersion>
     <Authors>RCMenuManager Contributors</Authors>
     <Description>A Windows context menu manager for Win10/Win11.</Description>
     <LangVersion>latest</LangVersion>
