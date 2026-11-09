@@ -33,7 +33,10 @@ public partial class App : Application
         services.AddSingleton<MenuParserService>();
         services.AddSingleton<IconService>();
         services.AddSingleton<IRegistryWriter, Win32RegistryWriter>();
-        services.AddSingleton<IBackupService, BackupService>();
+        services.AddSingleton<IRegistrySnapshotTool, RegExeSnapshotTool>();
+        services.AddSingleton<IBackupService>(sp => new BackupService(
+            BackupService.DefaultBackupDir(),
+            sp.GetRequiredService<IRegistrySnapshotTool>()));
         services.AddSingleton<IOperationLog, OperationLogService>();
         services.AddSingleton<WinVersionService>();
         services.AddSingleton<IWin11MenuService, Win11MenuService>();

@@ -32,24 +32,22 @@ public partial class MainViewModel
         var draft = EditPanel.Snapshot(item);
         try
         {
-            EditPanel.ErrorMessage = null;
-            _writer.UpdateDisplayName(item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName, draft.DisplayName);
-            if (!item.Model.IsParentOnly)
-                _writer.UpdateCommand(item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName, draft.Command);
-            _writer.UpdateIcon(item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName, draft.IconExpression);
-            _writer.SetExtended(item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName, draft.IsExtended);
-            _writer.SetPosition(item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName, draft.Position);
+            ClearError();
+            // One transaction: a single .reg snapshot, a single shell notification
+            // and a single audit line for the whole draft.
+            await Task.Run(() => _writer.SaveEdits(
+                item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName, draft, item.CanEditCommand));
             EditPanel.CancelEdit();
             StatusText = $"已保存 {item.VerbName}";
             await RefreshAsync();
         }
         catch (RegistryConflictException ex)
         {
-            EditPanel.ErrorMessage = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception ex)
         {
-            EditPanel.ErrorMessage = $"操作失败：{ex.Message}";
+            ReportError($"操作失败：{ex.Message}");
         }
     }
 
@@ -61,20 +59,21 @@ public partial class MainViewModel
         if (!await EnsureAdministratorAsync(item.WriteHive, item.SubKey)) return;
         try
         {
-            EditPanel.ErrorMessage = null;
+            ClearError();
             // Toggle direction is driven by IsDisabled so a verb that was
             // disabled via LegacyDisable (no ProgrammaticAccessOnly) still
             // gets fully re-enabled on the next click.
-            if (item.IsDisabled)
-                _writer.Enable(item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName);
+            var target = item;
+            if (target.IsDisabled)
+                await Task.Run(() => _writer.Enable(target.WriteHive, target.SubKey, ScopeIdOrEmpty(), target.VerbName));
             else
-                _writer.Disable(item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName);
+                await Task.Run(() => _writer.Disable(target.WriteHive, target.SubKey, ScopeIdOrEmpty(), target.VerbName));
             StatusText = $"{item.VerbName} 状态已切换";
             await RefreshAsync();
         }
         catch (Exception ex)
         {
-            EditPanel.ErrorMessage = $"操作失败：{ex.Message}";
+            ReportError($"操作失败：{ex.Message}");
         }
     }
 
@@ -88,17 +87,26 @@ public partial class MainViewModel
             confirmText: "删除", isDestructive: true);
         if (!ok) return;
         if (item.IsSystemVerb && !ConfirmSystemVerb(item.VerbName)) return;
+        if (item.IsSharedDefinition && !ConfirmDialog.Show(
+                "共享命令",
+                $"{item.VerbName} 来自系统命令库（CommandStore），可能被多个菜单引用。删除会同时影响其他菜单，确认继续？",
+                confirmText: "删除", isDestructive: true)) return;
+        if (item.HasDelegateExecute && !ConfirmDialog.Show(
+                "该项由 COM 代理执行",
+                $"{item.VerbName} 由系统 COM 处理器执行（DelegateExecute）。删除后只能通过备份恢复，确认继续？",
+                confirmText: "删除", isDestructive: true)) return;
         if (!await EnsureAdministratorAsync(item.WriteHive, item.SubKey)) return;
         try
         {
-            EditPanel.ErrorMessage = null;
-            _writer.Delete(item.WriteHive, item.SubKey, ScopeIdOrEmpty(), item.VerbName);
+            ClearError();
+            var target = item;
+            await Task.Run(() => _writer.Delete(target.WriteHive, target.SubKey, ScopeIdOrEmpty(), target.VerbName));
             StatusText = $"已删除 {item.VerbName}";
             await RefreshAsync();
         }
         catch (Exception ex)
         {
-            EditPanel.ErrorMessage = $"操作失败：{ex.Message}";
+            ReportError($"操作失败：{ex.Message}");
         }
     }
 
@@ -114,18 +122,18 @@ public partial class MainViewModel
         if (!await EnsureAdministratorAsync(hive, parentSubKey)) return;
         try
         {
-            EditPanel.ErrorMessage = null;
-            _writer.CreateRootVerb(hive, parentSubKey, ScopeIdOrEmpty(), draft);
+            ClearError();
+            await Task.Run(() => _writer.CreateRootVerb(hive, parentSubKey, ScopeIdOrEmpty(), draft));
             StatusText = $"已新增 {draft.VerbName}";
             await RefreshAsync();
         }
         catch (RegistryConflictException ex)
         {
-            EditPanel.ErrorMessage = ex.Message;
+            ReportError(ex.Message);
         }
         catch (Exception ex)
         {
-            EditPanel.ErrorMessage = $"操作失败：{ex.Message}";
+            ReportError($"操作失败：{ex.Message}");
         }
     }
 
@@ -139,14 +147,15 @@ public partial class MainViewModel
         if (!await EnsureAdministratorAsync(parent.WriteHive, parent.SubKey)) return;
         try
         {
-            EditPanel.ErrorMessage = null;
-            _writer.CreateChildVerb(parent.WriteHive, parent.SubKey, ScopeIdOrEmpty(), draft);
+            ClearError();
+            var target = parent;
+            await Task.Run(() => _writer.CreateChildVerb(target.WriteHive, target.SubKey, ScopeIdOrEmpty(), draft));
             StatusText = $"已新增 {draft.VerbName}";
             await RefreshAsync();
         }
         catch (Exception ex)
         {
-            EditPanel.ErrorMessage = $"操作失败：{ex.Message}";
+            ReportError($"操作失败：{ex.Message}");
         }
     }
 
@@ -192,6 +201,7 @@ public partial class MainViewModel
 
         try
         {
+            ClearError();
             _backup.Import(rec.FilePath);
             StatusText = "已恢复 " + rec.VerbName;
             await RefreshAsync();
@@ -199,6 +209,7 @@ public partial class MainViewModel
         }
         catch (System.Exception ex)
         {
+            ReportError("恢复失败：" + ex.Message);
             StatusText = "恢复失败：" + ex.Message;
             return false;
         }

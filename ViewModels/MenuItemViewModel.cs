@@ -75,6 +75,22 @@ public partial class MenuItemViewModel : ObservableObject
     public bool IsTop => string.Equals(Model.Position, "Top", StringComparison.OrdinalIgnoreCase);
     public bool IsBottom => string.Equals(Model.Position, "Bottom", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>CLSID-backed execution (DelegateExecute). Such verbs have no command line.</summary>
+    public string? DelegateExecute => Model.DelegateExecute;
+    public bool HasDelegateExecute => Model.HasDelegateExecute;
+    public string? AppliesTo => Model.AppliesTo;
+    public bool HasLuaShield => Model.HasLuaShield;
+
+    /// <summary>Resolved from the shared CommandStore; editing affects other menus too.</summary>
+    public bool IsSharedDefinition => Model.IsSharedDefinition;
+
+    /// <summary>
+    /// False when editing the command line would break the verb: DelegateExecute
+    /// verbs are executed by a COM handler, and cascading parents deliberately
+    /// have no command of their own.
+    /// </summary>
+    public bool CanEditCommand => !HasDelegateExecute && !Model.IsParentOnly;
+
     /// <summary>Hive that should be targeted when writing back this verb.
     /// HKCR origins map to HKLM since HKCR is the merged virtual view.</summary>
     public Microsoft.Win32.RegistryHive WriteHive => Model.Origin switch
@@ -92,7 +108,14 @@ public partial class MenuItemViewModel : ObservableObject
         {
             var path = Model.RegistryPath;
             var idx = path.IndexOf('\\');
-            return idx < 0 ? string.Empty : path.Substring(idx + 1);
+            var sub = idx < 0 ? string.Empty : path.Substring(idx + 1);
+            // HKCR is a merged view; the writable home for a machine-wide entry is
+            // HKLM\SOFTWARE\Classes. Without this prefix the write silently lands
+            // in HKLM\<verb path>, creating a junk key instead of editing the verb.
+            if (Model.Origin == RegistryHiveOrigin.ClassesRoot &&
+                !sub.StartsWith(@"SOFTWARE\Classes\", StringComparison.OrdinalIgnoreCase))
+                sub = @"SOFTWARE\Classes\" + sub;
+            return sub;
         }
     }
 
@@ -110,6 +133,9 @@ public partial class MenuItemViewModel : ObservableObject
             if (IsProgrammaticOnly) parts.Add("仅程序");
             if (IsLegacyDisabled) parts.Add("禁用");
             if (IsSystemVerb) parts.Add("系统");
+            if (HasDelegateExecute) parts.Add("COM 代理");
+            if (HasLuaShield) parts.Add("UAC");
+            if (IsSharedDefinition) parts.Add("共享");
             if (IsTop) parts.Add("置顶");
             if (IsBottom) parts.Add("置底");
             return string.Join(" · ", parts);

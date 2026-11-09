@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -13,6 +14,10 @@ namespace RCMenuManager.Helpers;
 /// </summary>
 public static class MuiStringHelper
 {
+    // The same handful of MUI references (shell32.dll,-8506 etc.) show up on every
+    // scope load; caching keeps scope switching from re-entering COM each time.
+    private static readonly ConcurrentDictionary<string, string?> Cache = new(StringComparer.OrdinalIgnoreCase);
+
     [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int SHLoadIndirectString(
         string pszSource,
@@ -30,7 +35,14 @@ public static class MuiStringHelper
         if (string.IsNullOrWhiteSpace(indirect))
             return null;
 
-        // Not an indirect reference - hand it back as a literal string.
+        if (!indirect.StartsWith('@'))
+            return indirect;
+
+        return Cache.GetOrAdd(indirect, ResolveCore);
+    }
+
+    private static string? ResolveCore(string indirect)
+    {        // Not an indirect reference - hand it back as a literal string.
         if (!indirect.StartsWith('@'))
             return indirect;
 

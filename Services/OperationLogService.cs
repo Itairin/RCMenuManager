@@ -19,19 +19,29 @@ public sealed record OperationLogEntry(
     string? error);
 
 /// <summary>
-/// Append-only JSON log of every write attempt. The file is created on first
-/// use and never rotated; Phase 6 will read this list to drive its UI.
+/// Append-only JSON log of every write attempt (one JSON object per line).
+/// The file is capped and rotated: an unbounded log eventually becomes a
+/// support problem ("operations.log is 40 MB") for a tool that writes here on
+/// every edit.
 /// </summary>
 public sealed class OperationLogService : IOperationLog
 {
+    private const long MaxBytes = 5L * 1024 * 1024;
+    private const int KeptGenerations = 2; // operations.log.1, operations.log.2
+
     private readonly string _path;
+    private readonly long _maxBytes;
     private readonly object _lock = new();
 
     public OperationLogService() : this(DefaultPath()) { }
 
-    public OperationLogService(string path)
+    public OperationLogService(string path) : this(path, MaxBytes) { }
+
+    /// <summary>Size cap is injectable so rotation can be covered by tests.</summary>
+    internal OperationLogService(string path, long maxBytes)
     {
         _path = path;
+        _maxBytes = maxBytes;
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
     }
 
@@ -43,7 +53,36 @@ public sealed class OperationLogService : IOperationLog
     {
         var json = JsonSerializer.Serialize(entry);
         lock (_lock)
-            File.AppendAllText(_path, json + Environment.NewLine);
+        {
+            try
+            {
+                RotateIfNeeded();
+                File.AppendAllText(_path, json + Environment.NewLine);
+            }
+            catch (IOException)
+            {
+                // A second instance (or an indexer/AV) holding the file must not
+                // turn a successful registry write into a failed one.
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    /// <summary>Shifts operations.log -> .1 -> .2 once the active file exceeds the cap.</summary>
+    private void RotateIfNeeded()
+    {
+        var info = new FileInfo(_path);
+        if (!info.Exists || info.Length < _maxBytes) return;
+
+        for (var gen = KeptGenerations - 1; gen >= 1; gen--)
+        {
+            var from = $"{_path}.{gen}";
+            var to = $"{_path}.{gen + 1}";
+            if (File.Exists(from)) File.Move(from, to, overwrite: true);
+        }
+        File.Move(_path, _path + ".1", overwrite: true);
     }
 
     public IReadOnlyList<OperationLogEntry> ReadAll()

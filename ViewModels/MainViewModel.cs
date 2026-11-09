@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -70,6 +71,15 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isDragOver;
+
+    /// <summary>Surfaced in the error banner. Kept separate from
+    /// <see cref="EditPanelViewModel.ErrorMessage"/> because add / delete /
+    /// preset-apply failures happen outside edit mode, where that panel is hidden.</summary>
+    [ObservableProperty]
+    private string? _errorBanner;
+
+    private CancellationTokenSource? _loadCts;
+    private int _loadVersion;
 
     public bool IsAdministrator { get; }
 
@@ -150,28 +160,70 @@ public partial class MainViewModel : ObservableObject
 
     public async Task LoadAsync(MenuScope scope)
     {
+        // Switching scopes quickly used to race: two loads ran concurrently and the
+        // slower one could populate the list while the header showed the other scope.
+        // Every load now takes a version ticket and cancels its predecessor; results
+        // from a stale ticket are discarded instead of applied.
+        var version = Interlocked.Increment(ref _loadVersion);
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _loadCts = cts;
+
         IsLoading = true;
         StatusText = $"正在加载 {scope.DisplayName} ...";
         MenuItems.Clear();
         ShellExtensions = Array.Empty<ShellExtensionInfo>();
         try
         {
-            var items = await Task.Run(() => _parser.GetMenuItems(scope));
-            var extensions = await Task.Run(() => _parser.GetShellExtensionHandlers(scope));
+            var token = cts.Token;
+            var (items, extensions) = await Task.Run(() =>
+            {
+                var parsed = _parser.GetMenuItems(scope);
+                token.ThrowIfCancellationRequested();
+                return (parsed, _parser.GetShellExtensionHandlers(scope));
+            }, token);
+
+            if (version != Volatile.Read(ref _loadVersion))
+                return;
+
             foreach (var item in items)
                 MenuItems.Add(new MenuItemViewModel(item, _icons));
             ShellExtensions = extensions;
             StatusText = $"{scope.DisplayName} · 共 {MenuItems.Count} 项" + (IsAdministrator ? "" : " · 当前未提权 (asInvoker)");
         }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer load; the newer call owns the UI state.
+        }
         catch (Exception ex)
         {
-            StatusText = $"加载失败: {ex.Message}";
+            if (version == Volatile.Read(ref _loadVersion))
+                StatusText = $"加载失败: {ex.Message}";
         }
         finally
         {
-            IsLoading = false;
+            if (version == Volatile.Read(ref _loadVersion))
+                IsLoading = false;
         }
     }
+
+    /// <summary>Shows a failure that happened outside the edit panel (add / delete /
+    /// restore / preset apply) and keeps the same text in the panel for context.</summary>
+    public void ReportError(string message)
+    {
+        ErrorBanner = message;
+        EditPanel.ErrorMessage = message;
+    }
+
+    public void ClearError()
+    {
+        ErrorBanner = null;
+        EditPanel.ErrorMessage = null;
+    }
+
+    [RelayCommand]
+    private void DismissError() => ErrorBanner = null;
 }
 
 

@@ -150,8 +150,23 @@
                             </Grid>
                         </Border>
 
-                        <TextBlock Text="命令" Style="{StaticResource FieldHeader}" />
-                        <TextBox Style="{StaticResource ReadOnlyValueBox}" Text="{Binding Command, Mode=OneWay}" />
+                        <TextBlock Text="命令" Style="{StaticResource FieldHeader}"
+                                   Visibility="{Binding HasDelegateExecute, Converter={StaticResource BoolToVisInverse}}" />
+                        <TextBox Style="{StaticResource ReadOnlyValueBox}" Text="{Binding Command, Mode=OneWay}"
+                                 Visibility="{Binding HasDelegateExecute, Converter={StaticResource BoolToVisInverse}}" />
+
+                        <StackPanel Visibility="{Binding HasDelegateExecute, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="执行方式" Style="{StaticResource FieldHeader}" />
+                            <TextBox Style="{StaticResource ReadOnlyValueBox}" Text="{Binding DelegateExecute, Mode=OneWay}" />
+                            <TextBlock Text="该项由系统 COM 处理器执行（DelegateExecute），没有命令行。为保证行为不变，编辑面板不会写入 command 值。"
+                                       Foreground="{StaticResource MutedTextBrush}" FontSize="11"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" />
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding AppliesTo, Converter={StaticResource StringToVis}, FallbackValue=Collapsed}">
+                            <TextBlock Text="AppliesTo（显示条件）" Style="{StaticResource FieldHeader}" />
+                            <TextBox Style="{StaticResource ReadOnlyValueBox}" Text="{Binding AppliesTo, Mode=OneWay}" />
+                        </StackPanel>
 
                         <StackPanel Visibility="{Binding HasEnvExpansion, Converter={StaticResource BoolToVis}}">
                             <TextBlock Text="展开后的命令" Style="{StaticResource FieldHeader}" />
@@ -183,6 +198,19 @@
                             <Border Style="{StaticResource FlagBadge}" Background="{StaticResource DangerSubtleBrush}"
                                     Visibility="{Binding IsSystemVerb, Converter={StaticResource BoolToVis}}">
                                 <TextBlock Text="系统 Verb" Foreground="{StaticResource DangerBrush}" FontSize="11" />
+                            </Border>
+                            <Border Style="{StaticResource FlagBadge}" Background="{StaticResource InfoSubtleBrush}"
+                                    Visibility="{Binding HasDelegateExecute, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="COM 代理执行" Foreground="{StaticResource InfoBrush}" FontSize="11" />
+                            </Border>
+                            <Border Style="{StaticResource FlagBadge}" Background="{StaticResource WarnSubtleBrush}"
+                                    Visibility="{Binding HasLuaShield, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="UAC 盾牌" Foreground="{StaticResource WarnBrush}" FontSize="11" />
+                            </Border>
+                            <Border Style="{StaticResource FlagBadge}" Background="{StaticResource WarnSubtleBrush}"
+                                    Visibility="{Binding IsSharedDefinition, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="共享命令库" Foreground="{StaticResource WarnBrush}" FontSize="11"
+                                           ToolTip="该子项来自 CommandStore，可能被其他菜单引用；修改会影响所有引用者" />
                             </Border>
                             <Border Style="{StaticResource FlagBadge}" Background="{StaticResource SuccessSubtleBrush}"
                                     Visibility="{Binding IsTop, Converter={StaticResource BoolToVis}}">
@@ -235,6 +263,8 @@
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="命令" Style="{StaticResource FieldLabel}" Margin="0,0,12,10" />
                         <TextBox   Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
                                    Text="{Binding EditPanel.DraftCommand, UpdateSourceTrigger=PropertyChanged}"
+                                   IsEnabled="{Binding SelectedItem.CanEditCommand, FallbackValue=True}"
+                                   ToolTip="该项由 COM 处理器执行（DelegateExecute），命令行不可编辑，避免覆盖原有行为"
                                    Margin="0,0,0,10"
                                    FontFamily="Cascadia Mono, Consolas, monospace" />
                         <TextBlock Grid.Row="3" Grid.Column="0" Text="图标" Style="{StaticResource FieldLabel}" Margin="0,0,12,10" />

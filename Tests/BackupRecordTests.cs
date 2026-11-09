@@ -28,6 +28,16 @@ public class BackupRecordTests
     }
 
     [Fact]
+    public void FromFile_parses_sequence_token_used_for_same_second_writes()
+    {
+        var rec = BackupRecord.FromFile(@"C:\b\20260617-142530-002-Folder-OpenWith.reg", Array.Empty<OperationLogEntry>());
+        Assert.NotNull(rec);
+        Assert.Equal(new DateTime(2026, 6, 17, 14, 25, 30), rec!.Timestamp);
+        Assert.Equal("Folder", rec.ScopeId);
+        Assert.Equal("OpenWith", rec.VerbName);
+    }
+
+    [Fact]
     public void FromFile_rejects_non_reg() => Assert.Null(BackupRecord.FromFile(@"C:\b\foo.txt", Array.Empty<OperationLogEntry>()));
 
     [Fact]

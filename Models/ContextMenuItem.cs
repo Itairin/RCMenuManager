@@ -42,6 +42,29 @@ public sealed class ContextMenuItem
     /// <summary>True when the entry has the <c>LegacyDisable</c> value.</summary>
     public bool IsLegacyDisabled { get; init; }
 
+    /// <summary>
+    /// CLSID of a COM handler that executes this verb instead of a command line
+    /// (<c>DelegateExecute</c>). Modern Windows verbs — "Compress to ZIP", many
+    /// built-in shell items — use this shape and have no <c>command</c> sub-key.
+    /// </summary>
+    public string? DelegateExecute { get; init; }
+
+    /// <summary>
+    /// <c>AppliesTo</c> condition (e.g. <c>System.FileName:~&lt;"*.txt"</c>).
+    /// Explorer only shows the verb when the expression matches.
+    /// </summary>
+    public string? AppliesTo { get; init; }
+
+    /// <summary>True when the entry carries a <c>HasLUAShield</c> value (UAC badge).</summary>
+    public bool HasLuaShield { get; init; }
+
+    /// <summary>
+    /// True when this item is not owned by the parent menu but resolved from the
+    /// shared <c>CommandStore</c>. Editing or deleting it changes every menu that
+    /// references the same command, so the UI must warn before touching it.
+    /// </summary>
+    public bool IsSharedDefinition { get; init; }
+
     /// <summary>True for verbs known to be system-critical (open/edit/print/...).</summary>
     public bool IsSystemVerb { get; init; }
 
@@ -65,6 +88,13 @@ public sealed class ContextMenuItem
 
     /// <summary>True when the verb has cascading children but no command, i.e. it is a parent-only entry.</summary>
     public bool IsParentOnly => string.IsNullOrEmpty(Command) && Children.Count > 0;
+
+    /// <summary>
+    /// True when the verb is executed by a COM handler. Writing a <c>command</c>
+    /// value for such a verb silently overrides the handler, so the editor must
+    /// leave the command alone.
+    /// </summary>
+    public bool HasDelegateExecute => !string.IsNullOrEmpty(DelegateExecute);
 
     public override string ToString() => $"{DisplayName} ({VerbName})";
 }

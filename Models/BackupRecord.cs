@@ -34,6 +34,12 @@ public sealed record BackupRecord(
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out var ts)) return null;
         var rest = stem.Length > tsLen + 1 ? stem.Substring(tsLen + 1) : string.Empty;
+        // Newer files carry a zero-padded collision counter between the timestamp
+        // and the scope ("20260617-142530-001-Folder-OpenWith"), because several
+        // writes for the same verb can land inside the same second.
+        var seqDash = rest.IndexOf('-');
+        if (seqDash > 0 && seqDash <= 4 && int.TryParse(rest.Substring(0, seqDash), out _))
+            rest = rest.Substring(seqDash + 1);
         string scope, verb;
         var lastDash = rest.LastIndexOf('-');
         if (lastDash < 0) { scope = string.Empty; verb = rest; }

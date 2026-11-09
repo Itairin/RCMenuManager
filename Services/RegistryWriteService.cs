@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Win32;
 using RCMenuManager.Helpers;
 using RCMenuManager.Models;
@@ -6,9 +7,11 @@ using RCMenuManager.Models;
 namespace RCMenuManager.Services;
 
 /// <summary>
-/// Single funnel for every verb-key write. Each method follows the same flow:
-/// elevation check -> backup -> in-memory/registry write -> SHChangeNotify ->
-/// log append. On failure the exception is logged with success=false and rethrown.
+/// Single funnel for every verb-key write. Each public operation is one
+/// transaction: elevation check -> backup -> one or more mutations ->
+/// SHChangeNotify -> one log entry. Batching matters because a single "save"
+/// edits up to five values; issuing five separate transactions produced five
+/// backups of the same key, five shell notifications and five log lines.
 /// </summary>
 public sealed class RegistryWriteService
 {
@@ -31,56 +34,77 @@ public sealed class RegistryWriteService
     public bool CanWrite(RegistryHive hive) => hive == RegistryHive.CurrentUser || _isAdmin();
 
     public void Disable(RegistryHive hive, string subKey, string scopeId, string verbName) =>
-        Run(hive, subKey, scopeId, verbName, "Disable", () =>
-            _writer.SetStringValue(hive, subKey, "ProgrammaticAccessOnly", string.Empty));
+        Execute(hive, subKey, scopeId, verbName, "Disable", w =>
+            w.SetStringValue(hive, subKey, "ProgrammaticAccessOnly", string.Empty));
 
     public void Enable(RegistryHive hive, string subKey, string scopeId, string verbName) =>
-        Run(hive, subKey, scopeId, verbName, "Enable", () =>
+        Execute(hive, subKey, scopeId, verbName, "Enable", w =>
         {
             // Clear both "hidden from Explorer" mechanisms. The legacy
             // LegacyDisable flag is ignored by modern Explorers but still
             // respected by some shell extensions, so it has to go too.
-            _writer.DeleteValue(hive, subKey, "ProgrammaticAccessOnly");
-            _writer.DeleteValue(hive, subKey, "LegacyDisable");
+            w.DeleteValue(hive, subKey, "ProgrammaticAccessOnly");
+            w.DeleteValue(hive, subKey, "LegacyDisable");
         });
 
     public void Delete(RegistryHive hive, string subKey, string scopeId, string verbName) =>
-        Run(hive, subKey, scopeId, verbName, "Delete", () =>
-            _writer.DeleteSubKeyTree(hive, subKey));
+        Execute(hive, subKey, scopeId, verbName, "Delete", w => w.DeleteSubKeyTree(hive, subKey));
 
     public void UpdateDisplayName(RegistryHive hive, string subKey, string scopeId, string verbName, string displayName) =>
-        Run(hive, subKey, scopeId, verbName, "UpdateDisplayName", () =>
-            _writer.SetStringValue(hive, subKey, string.Empty, displayName));
+        Execute(hive, subKey, scopeId, verbName, "UpdateDisplayName", w =>
+            w.SetStringValue(hive, subKey, string.Empty, displayName));
 
     public void UpdateCommand(RegistryHive hive, string subKey, string scopeId, string verbName, string command) =>
-        Run(hive, subKey, scopeId, verbName, "UpdateCommand", () =>
-            _writer.SetStringValue(hive, subKey + @"\command", string.Empty, command));
+        Execute(hive, subKey, scopeId, verbName, "UpdateCommand", w =>
+            w.SetStringValue(hive, subKey + @"\command", string.Empty, command));
 
     public void UpdateIcon(RegistryHive hive, string subKey, string scopeId, string verbName, string iconExpression) =>
-        Run(hive, subKey, scopeId, verbName, "UpdateIcon", () =>
+        Execute(hive, subKey, scopeId, verbName, "UpdateIcon", w =>
         {
             if (string.IsNullOrEmpty(iconExpression))
-                _writer.DeleteValue(hive, subKey, "Icon");
+                w.DeleteValue(hive, subKey, "Icon");
             else
-                _writer.SetStringValue(hive, subKey, "Icon", iconExpression);
+                w.SetStringValue(hive, subKey, "Icon", iconExpression);
         });
 
     public void SetExtended(RegistryHive hive, string subKey, string scopeId, string verbName, bool extended) =>
-        Run(hive, subKey, scopeId, verbName, "SetExtended", () =>
+        Execute(hive, subKey, scopeId, verbName, "SetExtended", w =>
         {
-            if (extended) _writer.SetStringValue(hive, subKey, "Extended", string.Empty);
-            else _writer.DeleteValue(hive, subKey, "Extended");
+            if (extended) w.SetStringValue(hive, subKey, "Extended", string.Empty);
+            else w.DeleteValue(hive, subKey, "Extended");
         });
 
     public void SetPosition(RegistryHive hive, string subKey, string scopeId, string verbName, string position) =>
-        Run(hive, subKey, scopeId, verbName, "SetPosition", () =>
+        Execute(hive, subKey, scopeId, verbName, "SetPosition", w =>
         {
-            if (string.Equals(position, "Top", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(position, "Bottom", StringComparison.OrdinalIgnoreCase))
-                _writer.SetStringValue(hive, subKey, "Position", position);
-            else
-                _writer.DeleteValue(hive, subKey, "Position");
+            if (IsTopOrBottom(position)) w.SetStringValue(hive, subKey, "Position", position);
+            else w.DeleteValue(hive, subKey, "Position");
         });
+
+    /// <summary>
+    /// Applies a whole edit-panel draft as ONE transaction: a single backup,
+    /// a single shell notification and a single log entry. Command is skipped
+    /// when <paramref name="includeCommand"/> is false (DelegateExecute verbs
+    /// own their command through COM; writing one would override that).
+    /// </summary>
+    public void SaveEdits(RegistryHive hive, string subKey, string scopeId, string verbName,
+        EditableVerbDraft draft, bool includeCommand)
+    {
+        Execute(hive, subKey, scopeId, verbName, "Save", w =>
+        {
+            w.SetStringValue(hive, subKey, string.Empty, draft.DisplayName);
+            if (includeCommand)
+                w.SetStringValue(hive, subKey + @"\command", string.Empty, draft.Command);
+            if (string.IsNullOrEmpty(draft.IconExpression))
+                w.DeleteValue(hive, subKey, "Icon");
+            else
+                w.SetStringValue(hive, subKey, "Icon", draft.IconExpression);
+            if (draft.IsExtended) w.SetStringValue(hive, subKey, "Extended", string.Empty);
+            else w.DeleteValue(hive, subKey, "Extended");
+            if (IsTopOrBottom(draft.Position)) w.SetStringValue(hive, subKey, "Position", draft.Position);
+            else w.DeleteValue(hive, subKey, "Position");
+        });
+    }
 
     /// <summary>Creates a brand-new verb at the scope root.</summary>
     public void CreateRootVerb(RegistryHive hive, string scopeShellSubKey, string scopeId, EditableVerbDraft draft)
@@ -94,8 +118,10 @@ public sealed class RegistryWriteService
         if (_writer.KeyExists(hive, verbKey))
             throw new RegistryConflictException(hive, verbKey);
 
-        Run(hive, verbKey, scopeId, draft.VerbName, draft.IsParentOnly ? "CreateParent" : "CreateRoot", () =>
-            ApplyDraft(hive, verbKey, draft, includeShellSubKey: draft.IsParentOnly));
+        // The key does not exist yet, so the pre-write snapshot is legitimately
+        // absent -- BackupService.Export returns null instead of throwing.
+        Execute(hive, verbKey, scopeId, draft.VerbName, draft.IsParentOnly ? "CreateParent" : "CreateRoot", w =>
+            ApplyDraft(w, hive, verbKey, draft, includeShellSubKey: draft.IsParentOnly));
     }
 
     /// <summary>Creates a child verb under <paramref name="parentVerbSubKey"/>'s \shell sub-tree.</summary>
@@ -111,39 +137,47 @@ public sealed class RegistryWriteService
         if (_writer.KeyExists(hive, verbKey))
             throw new RegistryConflictException(hive, verbKey);
 
-        Run(hive, verbKey, scopeId, draft.VerbName, "CreateChild", () =>
+        Execute(hive, verbKey, scopeId, draft.VerbName, "CreateChild", w =>
         {
-            if (!_writer.KeyExists(hive, parentShell))
-                _writer.CreateSubKey(hive, parentShell);
-            ApplyDraft(hive, verbKey, draft, includeShellSubKey: draft.IsParentOnly);
+            if (!w.KeyExists(hive, parentShell))
+                w.CreateSubKey(hive, parentShell);
+            ApplyDraft(w, hive, verbKey, draft, includeShellSubKey: draft.IsParentOnly);
         });
     }
 
-    private void ApplyDraft(RegistryHive hive, string verbKey, EditableVerbDraft draft, bool includeShellSubKey)
+    private static bool IsTopOrBottom(string? position) =>
+        string.Equals(position, "Top", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(position, "Bottom", StringComparison.OrdinalIgnoreCase);
+
+    private void ApplyDraft(IRegistryWriter w, RegistryHive hive, string verbKey, EditableVerbDraft draft, bool includeShellSubKey)
     {
-        _writer.CreateSubKey(hive, verbKey);
+        w.CreateSubKey(hive, verbKey);
         if (!string.IsNullOrEmpty(draft.DisplayName))
-            _writer.SetStringValue(hive, verbKey, string.Empty, draft.DisplayName);
+            w.SetStringValue(hive, verbKey, string.Empty, draft.DisplayName);
         if (!string.IsNullOrEmpty(draft.IconExpression))
-            _writer.SetStringValue(hive, verbKey, "Icon", draft.IconExpression);
+            w.SetStringValue(hive, verbKey, "Icon", draft.IconExpression);
         if (draft.IsExtended)
-            _writer.SetStringValue(hive, verbKey, "Extended", string.Empty);
-        if (string.Equals(draft.Position, "Top", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(draft.Position, "Bottom", StringComparison.OrdinalIgnoreCase))
-            _writer.SetStringValue(hive, verbKey, "Position", draft.Position);
+            w.SetStringValue(hive, verbKey, "Extended", string.Empty);
+        if (IsTopOrBottom(draft.Position))
+            w.SetStringValue(hive, verbKey, "Position", draft.Position);
 
         if (includeShellSubKey)
         {
-            _writer.CreateSubKey(hive, verbKey + "\\shell");
+            w.CreateSubKey(hive, verbKey + "\\shell");
         }
         else if (!string.IsNullOrEmpty(draft.Command))
         {
-            _writer.CreateSubKey(hive, verbKey + "\\command");
-            _writer.SetStringValue(hive, verbKey + "\\command", string.Empty, draft.Command);
+            w.CreateSubKey(hive, verbKey + "\\command");
+            w.SetStringValue(hive, verbKey + "\\command", string.Empty, draft.Command);
         }
     }
 
-    private void Run(RegistryHive hive, string subKey, string scopeId, string verbName, string op, Action mutate)
+    /// <summary>
+    /// Runs one logical write: backup, mutations, shell notify, log. The backup
+    /// returns null for create operations (nothing to snapshot) and that is not
+    /// treated as a failure.
+    /// </summary>
+    private void Execute(RegistryHive hive, string subKey, string scopeId, string verbName, string op, Action<IRegistryWriter> mutate)
     {
         if (!CanWrite(hive))
             throw new ElevationRequiredException(hive, subKey);
@@ -152,7 +186,7 @@ public sealed class RegistryWriteService
         try
         {
             backupPath = _backup.Export(hive, subKey, scopeId, verbName);
-            mutate();
+            mutate(_writer);
             _notifyShell();
             _log.Append(new OperationLogEntry(DateTime.UtcNow, scopeId, verbName, op, hive, subKey, backupPath, success: true, error: null));
         }

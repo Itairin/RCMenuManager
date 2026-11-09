@@ -138,52 +138,46 @@ public class MenuParserService
 
     private static IReadOnlyList<RegistryQueryEntry> GetShellExtensionQueryPaths(MenuScope scope)
     {
+        // HKCU first, then HKLM. HKCR is deliberately not probed: it is the merged
+        // view of HKCU\Software\Classes + HKLM\SOFTWARE\Classes, so every entry it
+        // yields is already covered (and would only cost extra key enumeration).
         var list = new List<RegistryQueryEntry>();
         switch (scope.Type)
         {
             case ScopeType.AllFiles:
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\*\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\*\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
-                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"*\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\AllFilesystemObjects\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\AllFilesystemObjects\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
-                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"AllFilesystemObjects\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
                 break;
             case ScopeType.Folder:
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\Directory\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\Directory\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
-                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"Directory\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\Folder\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\Folder\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
-                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"Folder\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
                 break;
             case ScopeType.FolderBackground:
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\Directory\Background\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\Directory\Background\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
-                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"Directory\Background\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
                 break;
             case ScopeType.Drive:
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\Drive\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\Drive\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
-                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"Drive\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
                 break;
             case ScopeType.Desktop:
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\DesktopBackground\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\DesktopBackground\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
-                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, @"DesktopBackground\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
                 break;
             case ScopeType.FileExtension:
                 if (string.IsNullOrEmpty(scope.Extension)) break;
                 var ext = scope.Extension!;
                 list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, $@"Software\Classes\{ext}\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
                 list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, $@"SOFTWARE\Classes\{ext}\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
-                list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, $@"{ext}\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
                 if (!string.IsNullOrEmpty(scope.ProgId))
                 {
                     var progId = scope.ProgId!;
                     list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, $@"Software\Classes\{progId}\shellex\ContextMenuHandlers", RegistryHiveOrigin.CurrentUser));
                     list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, $@"SOFTWARE\Classes\{progId}\shellex\ContextMenuHandlers", RegistryHiveOrigin.LocalMachine));
-                    list.Add(new RegistryQueryEntry(RegistryHive.ClassesRoot, $@"{progId}\shellex\ContextMenuHandlers", RegistryHiveOrigin.ClassesRoot));
                 }
                 break;
         }
@@ -217,17 +211,20 @@ public class MenuParserService
         return 1;
     }
 
-    private ContextMenuItem ParseVerb(RegistryKey verbKey, string verbName, RegistryQueryEntry rootEntry, int depth)
+    private ContextMenuItem ParseVerb(RegistryKey verbKey, string verbName, RegistryQueryEntry rootEntry, int depth, bool isSharedDefinition = false)
     {
         var defaultName = verbKey.GetValue(string.Empty) as string;
         var muiVerb = verbKey.GetValue("MUIVerb") as string;
         var icon = verbKey.GetValue("Icon") as string;
         var position = verbKey.GetValue("Position") as string;
+        var delegateExecute = verbKey.GetValue("DelegateExecute") as string;
+        var appliesTo = verbKey.GetValue("AppliesTo") as string;
         var valueNames = verbKey.GetValueNames();
         var hasExtended = valueNames.Any(n => string.Equals(n, "Extended", StringComparison.OrdinalIgnoreCase));
         var hasProgrammaticOnly = valueNames.Any(n => string.Equals(n, "ProgrammaticAccessOnly", StringComparison.OrdinalIgnoreCase));
         var hasNeverDefault = valueNames.Any(n => string.Equals(n, "NeverDefault", StringComparison.OrdinalIgnoreCase));
         var hasLegacyDisable = valueNames.Any(n => string.Equals(n, "LegacyDisable", StringComparison.OrdinalIgnoreCase));
+        var hasLuaShield = valueNames.Any(n => string.Equals(n, "HasLUAShield", StringComparison.OrdinalIgnoreCase));
 
         var displayName = ResolveDisplayName(muiVerb, defaultName, verbName);
         var command = ReadCommand(verbKey);
@@ -251,6 +248,10 @@ public class MenuParserService
             IsProgrammaticOnly = hasProgrammaticOnly,
             IsNeverDefault = hasNeverDefault,
             IsLegacyDisabled = hasLegacyDisable,
+            DelegateExecute = string.IsNullOrEmpty(delegateExecute) ? null : delegateExecute,
+            AppliesTo = string.IsNullOrEmpty(appliesTo) ? null : appliesTo,
+            HasLuaShield = hasLuaShield,
+            IsSharedDefinition = isSharedDefinition,
             IsSystemVerb = SystemVerbs.Contains(verbName),
             Origin = rootEntry.Origin,
             RegistryPath = $@"{rootEntry.FullPath}\{verbKey.Name.Substring(verbKey.Name.LastIndexOf('\\') + 1)}",
@@ -347,7 +348,10 @@ public class MenuParserService
                     continue;
                 try
                 {
-                    children.Add(ParseVerb(childKey, v, childEntry, depth));
+                    // Children resolved from CommandStore are shared definitions:
+                    // the same verb can be referenced by several parents (and by
+                    // other users' menus), so they are flagged for the UI.
+                    children.Add(ParseVerb(childKey, v, childEntry, depth, isSharedDefinition: true));
                 }
                 finally
                 {

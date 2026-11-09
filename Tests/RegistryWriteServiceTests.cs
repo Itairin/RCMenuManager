@@ -13,7 +13,8 @@ public class RegistryWriteServiceTests
     private static (RegistryWriteService svc, InMemoryRegistryWriter writer, RecordingBackup backup, RecordingLog log) Make(bool admin = false)
     {
         var writer = new InMemoryRegistryWriter();
-        var backup = new RecordingBackup();
+        // The fake mirrors the real contract: no snapshot when the key is absent.
+        var backup = new RecordingBackup(writer);
         var log = new RecordingLog();
         var svc = new RegistryWriteService(writer, backup, log, () => admin, notifyShell: () => { });
         return (svc, writer, backup, log);
@@ -215,18 +216,118 @@ public class RegistryWriteServiceTests
         Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade\shell"));
         Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\Directory\shell\Cascade\shell\Child1"));
     }
+
+    /// <summary>
+    /// Regression guard for the defect that made "add verb" and "apply preset"
+    /// always fail: the pre-write snapshot used to require an existing key, but a
+    /// create operation by definition has none.
+    /// </summary>
+    [Fact]
+    public void CreateRoot_succeeds_without_previous_state_and_logs_null_backup()
+    {
+        var (svc, writer, backup, log) = Make();
+        var draft = new EditableVerbDraft { VerbName = "Fresh", DisplayName = "新项", Command = "x.exe" };
+
+        svc.CreateRootVerb(RegistryHive.CurrentUser, @"Software\Classes\*\shell", "AllFiles", draft);
+
+        Assert.True(writer.KeyExists(RegistryHive.CurrentUser, @"Software\Classes\*\shell\Fresh"));
+        Assert.Equal(1, backup.CallCount);
+        Assert.True(log.LastSuccess);
+        Assert.NotNull(log.Last);
+        Assert.Null(log.Last!.backupPath);
+    }
+
+    [Fact]
+    public void SaveEdits_is_one_transaction_one_backup_one_log()
+    {
+        var (svc, writer, backup, log) = Make();
+        Seed(writer);
+
+        svc.SaveEdits(RegistryHive.CurrentUser, Verb, "Folder", "open", new EditableVerbDraft
+        {
+            VerbName = "open",
+            DisplayName = "新名称",
+            Command = "notepad.exe \"%1\"",
+            IconExpression = "imageres.dll,-64",
+            IsExtended = true,
+            Position = "Bottom",
+        }, includeCommand: true);
+
+        Assert.Equal(1, backup.CallCount);
+        Assert.Equal(1, log.Count);
+        Assert.Equal("新名称", writer.GetValue(RegistryHive.CurrentUser, Verb, string.Empty));
+        Assert.Equal("notepad.exe \"%1\"", writer.GetValue(RegistryHive.CurrentUser, Verb + @"\command", string.Empty));
+        Assert.Equal("imageres.dll,-64", writer.GetValue(RegistryHive.CurrentUser, Verb, "Icon"));
+        Assert.True(writer.ValueExists(RegistryHive.CurrentUser, Verb, "Extended"));
+        Assert.Equal("Bottom", writer.GetValue(RegistryHive.CurrentUser, Verb, "Position"));
+    }
+
+    [Fact]
+    public void SaveEdits_clears_values_that_were_removed_in_the_draft()
+    {
+        var (svc, writer, _, _) = Make();
+        Seed(writer);
+        writer.SetStringValue(RegistryHive.CurrentUser, Verb, "Icon", "shell32.dll,0");
+        writer.SetStringValue(RegistryHive.CurrentUser, Verb, "Extended", string.Empty);
+        writer.SetStringValue(RegistryHive.CurrentUser, Verb, "Position", "Top");
+
+        svc.SaveEdits(RegistryHive.CurrentUser, Verb, "Folder", "open", new EditableVerbDraft
+        {
+            VerbName = "open",
+            DisplayName = "Open",
+            Command = "explorer.exe %1",
+            IconExpression = string.Empty,
+            IsExtended = false,
+            Position = "Default",
+        }, includeCommand: true);
+
+        Assert.False(writer.ValueExists(RegistryHive.CurrentUser, Verb, "Icon"));
+        Assert.False(writer.ValueExists(RegistryHive.CurrentUser, Verb, "Extended"));
+        Assert.False(writer.ValueExists(RegistryHive.CurrentUser, Verb, "Position"));
+    }
+
+    /// <summary>DelegateExecute verbs own their execution through COM: writing a
+    /// command value would bypass the handler, so the flag must be honoured.</summary>
+    [Fact]
+    public void SaveEdits_leaves_command_untouched_for_delegate_execute_verbs()
+    {
+        var (svc, writer, _, _) = Make();
+        Seed(writer);
+
+        svc.SaveEdits(RegistryHive.CurrentUser, Verb, "Folder", "open", new EditableVerbDraft
+        {
+            VerbName = "open",
+            DisplayName = "改名",
+            Command = "should-not-be-written.exe",
+            IconExpression = string.Empty,
+            IsExtended = false,
+            Position = "Default",
+        }, includeCommand: false);
+
+        Assert.Equal("explorer.exe %1", writer.GetValue(RegistryHive.CurrentUser, Verb + @"\command", string.Empty));
+        Assert.Equal("改名", writer.GetValue(RegistryHive.CurrentUser, Verb, string.Empty));
+    }
 }
 
 internal sealed class RecordingBackup : IBackupService
 {
+    private readonly IRegistryWriter? _writer;
+
+    public RecordingBackup(IRegistryWriter? writer = null) => _writer = writer;
+
     public int CallCount;
     public Action? OnExport;
-    public string Export(RegistryHive hive, string subKey, string scopeId, string verbName)
+
+    public string? Export(RegistryHive hive, string subKey, string scopeId, string verbName)
     {
         CallCount++;
         OnExport?.Invoke();
+        // Same behaviour as BackupService: nothing to snapshot for a brand-new key.
+        if (_writer is not null && !_writer.KeyExists(hive, subKey))
+            return null;
         return $"recorded:{hive}:{subKey}";
     }
+
     public IReadOnlyList<RCMenuManager.Models.BackupRecord> List() => Array.Empty<RCMenuManager.Models.BackupRecord>();
     public void Import(string filePath) { }
     public void Delete(string filePath) { }
@@ -234,10 +335,14 @@ internal sealed class RecordingBackup : IBackupService
 
 internal sealed class RecordingLog : IOperationLog
 {
+    public int Count;
     public bool LastSuccess;
     public string? LastError;
+    public OperationLogEntry? Last;
     public void Append(OperationLogEntry entry)
     {
+        Count++;
+        Last = entry;
         LastSuccess = entry.success;
         LastError = entry.error;
     }
