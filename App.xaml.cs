@@ -64,6 +64,11 @@ public partial class App : Application
             ApplyPendingScope(vm);
         }
 
+        // ShellNew/SendTo enumeration is machine-dependent and slow on first
+        // use; warm it off the UI thread so the Preview tab's first right-click
+        // does not stall while HKCR is walked.
+        _ = System.Threading.Tasks.Task.Run(SystemMenuCatalog.Prewarm);
+
         var window = Services.GetRequiredService<MainWindow>();
         window.DataContext = vm;
         window.Show();
