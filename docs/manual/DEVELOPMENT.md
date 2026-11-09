@@ -13,7 +13,7 @@
 
 | 组件 | 选择 | 理由 |
 |------|------|------|
-| **框架** | WPF (.NET 9) | 原生 Windows 集成、直接 Registry API、Fluent UI |
+| **框架** | WPF (.NET 10) | 原生 Windows 集成、直接 Registry API、Fluent UI |
 | **语言** | C# | Registry 操作最成熟、社区资源丰富 |
 | **UI 风格** | Fluent Design / Modern WPF | 符合 Win11 设计语言 |
 | **打包** | Single-file publish | 无需安装，便携运行 |
@@ -22,7 +22,7 @@
 
 ```bash
 # 创建 WPF 项目
-dotnet new wpf -n RCMenuManager -f net9.0-windows
+dotnet new wpf -n RCMenuManager -f net10.0-windows
 
 # 添加必要的 NuGet 包
 dotnet add package CommunityToolkit.Mvvm
@@ -39,7 +39,7 @@ mkdir Models, Services, ViewModels, Views\Controls, Views\Dialogs, Converters, R
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>RCMenuManager</AssemblyName>

@@ -1,4 +1,4 @@
-; Inno Setup script for RCMenuManager
+﻿; Inno Setup script for RCMenuManager
 ; Builds a Win10/Win11 x64 installer for the self-contained publish output.
 
 #define AppName        "RCMenuManager"
@@ -6,7 +6,7 @@
 #define AppURL         "https://github.com/your-name/RCMenuManager"
 #define AppExe         "RCMenuManager.exe"
 #ifndef AppVersion
-  #define AppVersion "0.6.0"
+  #define AppVersion "0.7.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\publish\selfcontained"
@@ -35,7 +35,7 @@ PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog commandline
 OutputDir={#OutputDir}
 OutputBaseFilename={#AppName}-Setup-{#AppVersion}-x64
-SetupIconFile=
+SetupIconFile=..\Resources\AppIcon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern

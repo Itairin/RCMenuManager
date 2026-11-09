@@ -2,12 +2,12 @@
 
 [![Build](https://github.com/your-name/RCMenuManager/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/RCMenuManager/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4.svg)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6.svg)](#)
 
 > Windows 右键菜单可视化管理器，支持 Win10 / Win11 系统级与用户级菜单。
 
-RCMenuManager 是一个基于 WPF (.NET 9) 的桌面工具，让你可以查看、编辑、备份并一键应用 Windows 资源管理器右键菜单的 Shell 扩展项。
+RCMenuManager 是一个基于 WPF (.NET 10) 的桌面工具，让你可以查看、编辑、备份并一键应用 Windows 资源管理器右键菜单的 Shell 扩展项。
 
 ## 功能特性
 
@@ -27,8 +27,8 @@ RCMenuManager 是一个基于 WPF (.NET 9) 的桌面工具，让你可以查看�
 ### 环境要求
 
 - Windows 10 1809+ 或 Windows 11
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)（构建用）
-- 运行发布版需要 .NET 9 桌面运行时（或使用自包含发布）
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)（构建用）
+- 运行发布版需要 .NET 10 桌面运行时（或使用自包含发布）
 
 ### 从源码构建
 
@@ -56,7 +56,7 @@ dotnet publish RCMenuManager.csproj -c Release -r win-x64 `
     --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-产物位于 `bin\Release\net9.0-windows\win-x64\publish\RCMenuManager.exe`。
+产物位于 `bin\Release\net10.0-windows\win-x64\publish\RCMenuManager.exe`。
 
 ### 运行测试
 

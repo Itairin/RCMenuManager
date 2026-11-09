@@ -30,7 +30,7 @@ Windows 右键菜单管理器 - 可视化管理 Win10/Win11 右键菜单
 
 ### 环境要求
 
-- .NET 9 SDK
+- .NET 10 SDK
 - Windows 10/11
 - Visual Studio 2022 或 VS Code
 
@@ -67,7 +67,7 @@ RCMenuManager/
 
 ## 技术栈
 
-- WPF (.NET 9)
+- WPF (.NET 10)
 - C#
 - CommunityToolkit.Mvvm
 - Microsoft.Win32.Registry

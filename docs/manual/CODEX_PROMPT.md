@@ -12,7 +12,7 @@
 【项目信息】
 - 项目名称: RCMenuManager
 - 项目目录: D:\Itair\RCMenuManager
-- 框架: WPF (.NET 9)
+- 框架: WPF (.NET 10)
 - 目标系统: Windows 10/Windows 11
 - 开源协议: MIT
 
@@ -86,7 +86,7 @@ Phase 8: 拖拽识别 - 拖入文件/文件夹自动识别类型
 ```
 请创建 RCMenuManager WPF 项目的基础框架：
 
-1. 创建 WPF 项目 (.NET 9)
+1. 创建 WPF 项目 (.NET 10)
 2. 添加 NuGet 包: CommunityToolkit.Mvvm, Microsoft.Extensions.DependencyInjection, System.Drawing.Common
 3. 配置 app.manifest 启用 requireAdministrator
 4. 创建 Models/ContextMenuItem.cs - 菜单项数据模型
