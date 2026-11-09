@@ -75,6 +75,16 @@ public class RegistryService
                     // per-type handlers register.
                     Add(list, $@"SystemFileAssociations\{progId}\shell");
                 }
+                // Explorer keeps merging after the ProgID: the perceived type
+                // ("text", "image", "video"...) carries the entries every file of
+                // that kind shares - .txt gets 打开/编辑 from SystemFileAssociations
+                // \text, not from txtfile - and finally the all-files classes.
+                // Without these the list would not contain verbs the preview shows.
+                var perceived = ResolvePerceivedType(ext, scope.ProgId);
+                if (!string.IsNullOrEmpty(perceived))
+                    Add(list, $@"SystemFileAssociations\{perceived}\shell");
+                Add(list, @"*\shell");
+                Add(list, @"AllFilesystemObjects\shell");
                 break;
         }
 
@@ -85,6 +95,34 @@ public class RegistryService
         }
 
         return list;
+    }
+
+    /// <summary>
+    /// Reads the file type's <c>PerceivedType</c> ("text", "image", "video",
+    /// "audio", "compressed", "document"). Windows stores it on the extension key
+    /// and, for older types, on the ProgID instead.
+    /// </summary>
+    public string? ResolvePerceivedType(string extension, string? progId)
+    {
+        try
+        {
+            using (var extKey = Registry.ClassesRoot.OpenSubKey(extension))
+            {
+                if (extKey?.GetValue("PerceivedType") is string fromExt && !string.IsNullOrWhiteSpace(fromExt))
+                    return fromExt;
+            }
+            if (!string.IsNullOrEmpty(progId))
+            {
+                using var progKey = Registry.ClassesRoot.OpenSubKey(progId);
+                if (progKey?.GetValue("PerceivedType") is string fromProg && !string.IsNullOrWhiteSpace(fromProg))
+                    return fromProg;
+            }
+        }
+        catch
+        {
+            // Missing key / access denied: the type simply has no shared class.
+        }
+        return null;
     }
 
     /// <summary>
