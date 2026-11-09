@@ -42,6 +42,7 @@ public partial class App : Application
         services.AddSingleton<IWin11MenuService, Win11MenuService>();
         services.AddSingleton<IFileTypeService, FileTypeService>();
         services.AddSingleton<IPresetService, PresetService>();
+        services.AddSingleton<IShellContextMenuReader>(ShellContextMenuReader.Instance);
         services.AddSingleton<RegistryWriteService>(sp =>
             new RegistryWriteService(
                 sp.GetRequiredService<IRegistryWriter>(),

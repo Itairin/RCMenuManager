@@ -28,12 +28,19 @@ public partial class ContextMenuPreview : UserControl
     {
         if (DataContext is not MainViewModel vm || vm.SelectedScope is null) return;
 
-        var nodes = MenuPreviewComposer.Compose(
-            vm.SelectedScope.Scope,
-            vm.MenuItems.ToList(),
-            vm.ShellExtensions,
-            vm.ShowExtended,
-            clipboardHasFiles: HasClipboardFiles());
+        var native = vm.ShellMenu.TryRead(vm.SelectedScope.Scope, vm.ShowExtended);
+        var nodes = native is { Count: > 0 }
+            // Preferred: the menu Windows itself produced for this kind of
+            // object, so labels/order/icons are exactly what Explorer shows.
+            ? MenuPreviewComposer.ComposeNative(native, vm.MenuItems.ToList())
+            // Fallback when the shell cannot build one (locked-down machine,
+            // unknown class): the hand-built catalog layout.
+            : MenuPreviewComposer.Compose(
+                vm.SelectedScope.Scope,
+                vm.MenuItems.ToList(),
+                vm.ShellExtensions,
+                vm.ShowExtended,
+                clipboardHasFiles: HasClipboardFiles());
 
         if (nodes.Count == 0) return;
 

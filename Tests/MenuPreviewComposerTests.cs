@@ -354,6 +354,22 @@ public class MenuPreviewComposerTests
     }
 
     [Fact]
+    public void Registry_verbs_do_not_duplicate_built_in_entries()
+    {
+        // DesktopBackground\Shell\Personalize maps to the same "个性化" the
+        // shell already draws, so the fallback layout must not show it twice.
+        var personalize = Item("Personalize", "个性化(X)");
+        var nodes = MenuPreviewComposer.Compose(
+            MenuScope.Desktop,
+            new[] { personalize },
+            Array.Empty<ShellExtensionInfo>(),
+            showExtended: false,
+            clipboardHasFiles: true);
+
+        Assert.Single(nodes.Where(n => n.Header.StartsWith("个性化", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void Prewarm_keeps_repeated_composition_cheap()
     {
         SystemMenuCatalog.Prewarm();

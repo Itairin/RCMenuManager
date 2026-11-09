@@ -322,6 +322,12 @@ public class MenuParserService
             return muiVerb!;
         if (!string.IsNullOrEmpty(defaultName))
             return defaultName!;
+
+        // Shell-owned verbs (open/runas/edit/...) store their label in Windows,
+        // not in the registry — Explorer shows 打开(O) where the key says "open".
+        var standard = Helpers.StandardVerbLabels.Resolve(verbName);
+        if (standard is not null)
+            return standard;
         return verbName;
     }
 

@@ -47,11 +47,23 @@ internal static class PreviewMenuFactory
             MinHeight = 22,
         };
 
-        // Explorer draws the check as a plain glyph in the icon column. WPF's
-        // IsCheckable path renders a themed check box instead, which does not
-        // exist in a context menu, so the glyph is placed as the icon.
-        if (node.IsCheckable && node.IsChecked)
+        // Icon column priority: the icon the shell itself put on the row wins,
+        // then the check glyph of view/sort entries, then the verb's own icon.
+        if (node.Icon is not null)
         {
+            mi.Icon = new Image
+            {
+                Source = node.Icon,
+                Width = 16,
+                Height = 16,
+                SnapsToDevicePixels = true,
+            };
+        }
+        else if (node.IsCheckable && node.IsChecked)
+        {
+            // Explorer draws the check as a plain glyph in the icon column. WPF's
+            // IsCheckable path renders a themed check box instead, which does not
+            // exist in a context menu, so the glyph is placed as the icon.
             mi.Icon = new TextBlock
             {
                 Text = "\u2713",
@@ -95,7 +107,8 @@ internal static class PreviewMenuFactory
         if (node.Badge is null) return node.Header;
 
         var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        panel.Children.Add(new TextBlock
+        // AccessText so "打开(&O)" renders the way Explorer draws it (O underlined).
+        panel.Children.Add(new AccessText
         {
             Text = node.Header,
             VerticalAlignment = VerticalAlignment.Center,

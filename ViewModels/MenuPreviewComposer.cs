@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Windows.Media;
 using RCMenuManager.Models;
 using RCMenuManager.Services;
 
@@ -37,6 +39,9 @@ public sealed class PreviewNode
     /// <summary>Right-side badge ("Shift" for Extended verbs).</summary>
     public string? Badge { get; init; }
 
+    /// <summary>Icon taken straight from the shell's own menu item.</summary>
+    public ImageSource? Icon { get; init; }
+
     public MenuItemViewModel? Item { get; init; }
 
     public IReadOnlyList<PreviewNode> Children { get; init; } = Array.Empty<PreviewNode>();
@@ -67,7 +72,18 @@ public static class MenuPreviewComposer
         var layout = SystemMenuCatalog.Build(scope, clipboardHasFiles);
         var nodes = new List<PreviewNode>();
 
-        var visible = items.Where(i => showExtended || !i.IsExtended).ToList();
+        // The catalog already renders the shell's own entries. A verb that
+        // duplicates one of them (DesktopBackground\Shell\Personalize vs the
+        // built-in "个性化") would otherwise show up twice.
+        var builtInHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in layout.Before.Concat(layout.After))
+            if (entry.Kind != SystemMenuEntryKind.Separator)
+                builtInHeaders.Add(NormalizeText(entry.Header));
+
+        var visible = items
+            .Where(i => showExtended || !i.IsExtended)
+            .Where(i => !builtInHeaders.Contains(NormalizeText(i.DisplayName)))
+            .ToList();
         var top = visible.Where(i => i.IsTop).ToList();
         var bottom = visible.Where(i => i.IsBottom && !i.IsTop).ToList();
         var middle = visible.Where(i => !i.IsTop && !i.IsBottom).ToList();
@@ -108,6 +124,86 @@ public static class MenuPreviewComposer
         }
 
         return Normalize(nodes);
+    }
+
+    /// <summary>
+    /// Maps the menu Windows built onto preview rows. Nothing is reordered or
+    /// filtered: the shell's own output is authoritative, and rows that belong
+    /// to a verb this app can edit are linked back so clicking still selects it.
+    /// </summary>
+    public static IReadOnlyList<PreviewNode> ComposeNative(
+        IReadOnlyList<ShellMenuNode> native,
+        IReadOnlyList<MenuItemViewModel> items)
+    {
+        var lookup = BuildTextLookup(items);
+        return Normalize(native.Select(n => FromNative(n, lookup)).ToList());
+    }
+
+    private static PreviewNode FromNative(ShellMenuNode node, IReadOnlyDictionary<string, MenuItemViewModel> lookup)
+    {
+        if (node.IsSeparator) return PreviewNode.Separator();
+
+        lookup.TryGetValue(NormalizeText(node.Text), out var match);
+        return new PreviewNode
+        {
+            Header = node.Text,
+            Item = match,
+            IsBuiltIn = match is null,
+            IsEnabled = node.IsEnabled,
+            IsDefault = node.IsDefault,
+            IsChecked = node.IsChecked,
+            Icon = node.Icon,
+            // Shift-only verbs only show up in the extended menu, which the
+            // shell already filtered; the badge keeps that visible.
+            Badge = match is { IsExtended: true } ? "Shift" : null,
+            Children = node.Children.Select(c => FromNative(c, lookup)).ToArray(),
+        };
+    }
+
+    private static IReadOnlyDictionary<string, MenuItemViewModel> BuildTextLookup(IReadOnlyList<MenuItemViewModel> items)
+    {
+        var map = new Dictionary<string, MenuItemViewModel>(StringComparer.OrdinalIgnoreCase);
+        void Add(MenuItemViewModel item)
+        {
+            var key = NormalizeText(item.DisplayName);
+            if (key.Length > 0 && !map.ContainsKey(key)) map[key] = item;
+            foreach (var child in item.Children) Add(child);
+        }
+        foreach (var item in items) Add(item);
+        return map;
+    }
+
+    /// <summary>
+    /// "打开(&amp;O)" -> "打开", "&amp;Open WezTerm here" -> "Open WezTerm here":
+    /// menu text carries the access-key marker and the accelerator suffix, the
+    /// parsed display name does not.
+    /// </summary>
+    private static string NormalizeText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        var sb = new StringBuilder(text.Length);
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c == '&')
+            {
+                // "&&" is a literal ampersand; a lone "&" marks the access key.
+                if (i + 1 < text.Length && text[i + 1] == '&') { sb.Append('&'); i++; }
+                continue;
+            }
+            sb.Append(c);
+        }
+        var result = sb.ToString().Trim();
+        var open = result.LastIndexOf('(');
+        if (open > 0 && result.EndsWith(")", StringComparison.Ordinal))
+        {
+            // "(O)" / "(&O)" -> drop the accelerator suffix, keep real
+            // parentheses such as "压缩(zipped)文件夹".
+            var suffix = result.Substring(open + 1, result.Length - open - 2).TrimStart('&');
+            if (suffix.Length is 1 or 2 && suffix.All(char.IsLetterOrDigit))
+                result = result.Substring(0, open).Trim();
+        }
+        return result;
     }
 
     public static PreviewNode FromItem(MenuItemViewModel item)

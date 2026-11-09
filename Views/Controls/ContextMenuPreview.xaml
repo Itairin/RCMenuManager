@@ -53,10 +53,10 @@
                     <TextBlock Margin="0,8,0,0" Style="{StaticResource MutedText}" TextWrapping="Wrap">
                         <Run Text="在预览区任意位置" />
                         <Run Text="右键" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" />
-                        <Run Text="，即可看到与资源管理器一致的完整菜单：系统项（打开 / 查看 / 排序方式 / 新建 / 属性…）与当前作用域的注册表项按真实位置合并。" />
+                        <Run Text="，即可看到资源管理器为当前作用域生成的完整菜单 —— 菜单由 Windows 自己构建，项目顺序、文字、图标、快捷键、置灰状态与真实右键菜单一致。" />
                     </TextBlock>
                     <TextBlock Margin="0,6,0,0" Style="{StaticResource MutedText}" TextWrapping="Wrap">
-                        <Run Text="系统项为只读参考（“粘贴”是否可用取决于剪贴板）；点击注册表项会同步选中，右侧可" />
+                        <Run Text="不属于本工具的项为只读参考；点击注册表项会同步选中，右侧可" />
                         <Run Text="查看 / 编辑 / 删除 / 启停" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" />
                         <Run Text="。" />
                     </TextBlock>

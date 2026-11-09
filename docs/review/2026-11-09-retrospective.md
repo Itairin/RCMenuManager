@@ -313,3 +313,49 @@ Win11 25H2 仍支持 CLSID {86ca1aa0…} 覆盖（未公开行为，微软 Q&A �
 - 多选对象（多个文件 / 文件+文件夹混选）的菜单差异、各文件类型专属项
 - 「打开方式」的程序清单按 `OpenWithProgids` 名称推断，不是完整 MRU
 - Win11 新式菜单（`IExplorerCommand`）、图标按 DPI 提取、暗色主题
+
+---
+
+## 附录 C：预览改为「由 Windows 自己出菜单」（0.7.1，2026-11-09）
+
+### 为什么推翻附录 B 的做法
+
+附录 B 是手写目录（catalog）模拟系统项，只能覆盖「打开 / 查看 / 排序方式 / 新建 / 属性」这类固定的壳内建项。真实菜单里还有大量机器相关的项——`使用小米互传发送`、`使用 ToDesk 快传文件`、`通过 Code 打开`、`UltraISO`、`包含到库中`……这些由第三方 shell 扩展在 `QueryContextMenu` 时动态插入，无论如何枚举注册表都拼不出来。对照真实菜单截图即可看到：旧实现少了十来项，还把 `open` / `runas` 当原始 verb 名显示，第三方处理器显示成 `NvAppShExt Class` 这类 CLSID 类名。
+
+### 新做法
+
+| 文件 | 职责 |
+|---|---|
+| `Services/ShellContextMenuReader.cs` | 用 `SHCreateItemFromParsingName` + `IShellItem::BindToHandler(BHID_SFUIObject)` 拿到 `IContextMenu`，`QueryContextMenu` 后遍历 `HMENU`，逐项读出文本、分隔符、置灰/勾选/默认态与 `HBITMAP` 图标 |
+| `Services/ShellMenuNode.cs` | 上面那次遍历的中性结果 |
+| `Models/...`→`ViewModels/MenuPreviewComposer.ComposeNative` | 把 shell 的行映射成预览行；能对上本工具 verb 的行仍可点击选中（按去掉 `&` 与 `(O)` 后缀的文本匹配） |
+| `Helpers/StandardVerbLabels.cs` | `open/runas/edit/...` 的中文名（注册表里根本没存，只有 Shell 知道） |
+
+要点：
+
+- **作用域 → 具体对象**：shell 要一个真实对象才能出菜单，所以每个作用域用一份固定占位对象（`%LOCALAPPDATA%\RCMenuManager\preview\sample.exe`、`sample-folder`、系统盘根）。
+- **STA + 超时**：`QueryContextMenu` 必须在 STA 线程跑，且第三方处理器可能卡住，因此放到独立 STA 线程并限时 10 秒，超时/异常一律回落到附录 B 的 catalog。
+- **缓存**：按 `scope + extended` 缓存，`LoadAsync` 时失效并在后台预热，右键时直接命中。
+- **Shift 项**：`CMF_EXTENDEDVERBS` 让 shell 自己吐出 Extended 项，「显示 Shift 项」开关直接对应这个标志。
+- **图标**：菜单项的 `hbmpItem` 转成冻结的 `BitmapSource`（菜单销毁前完成，不做 `DeleteObject`）。部分程序用自绘回调（`HBMMENU_CALLBACK`）给图标，读不到时回落到该 verb 自己的 `Icon`。
+
+### 与真实菜单的逐项核对
+
+以本机 `.exe` 为例，dump 出的 shell 菜单与资源管理器实际右键完全一致：
+
+```
+打开(&O) / 以管理员身份运行(&A) / 在记事本中编辑 / 使用小米互传发送 /
+添加到收藏夹(&F) / 发送到 Sunshine 客户端 / 使用 ToDesk 快传文件 /
+通过 Code 打开 / 兼容性疑难解答(&Y) / 固定到"开始"(&P) / 通过网易邮箱大师发送 /
+授予访问权限(&G) / 复制文件地址(&A) / 共享(&S) / 还原以前的版本(&V)
+--- 发送到(&N) ▸ --- 剪切(&T) / 复制(&C) ---
+创建快捷方式(&S) / 删除(&D) / 重命名(&M) --- 属性(&R)
+```
+
+对照图：`docs/review/preview/exe-scope-live.png`（应用内）、`folder-scope-live.png`、`desktop-scope-live.png`。
+
+### 仍未覆盖
+
+- **桌面 / 文件夹背景**：这两类菜单由 shell 视图（`IShellView::GetItemObject(SVGIO_BACKGROUND)`）产生，`IShellItem` 路径拿不到，仍走 catalog（顺序与分组按真实菜单校准，但第三方背景项只能靠注册表拼接）。
+- **菜单行内自绘图标**（`HBMMENU_CALLBACK`）读不到位图。
+- 占位对象决定了个别上下文相关项：例如文件放在用户目录会多出「授予访问权限」，「固定到任务栏」则取决于对象是否可固定。

@@ -28,6 +28,7 @@ public partial class MainViewModel : ObservableObject
     private readonly WinVersionService _ver;
     private readonly IFileTypeService _fileTypes;
     private readonly IPresetService _presets;
+    private readonly IShellContextMenuReader _shellMenu;
 
     public WinVersionService VersionInfo => _ver;
 
@@ -81,6 +82,10 @@ public partial class MainViewModel : ObservableObject
     private CancellationTokenSource? _loadCts;
     private int _loadVersion;
 
+    /// <summary>Reads the menu Windows builds for the current scope; the preview
+    /// uses it so it matches Explorer exactly instead of an approximation.</summary>
+    public IShellContextMenuReader ShellMenu => _shellMenu;
+
     public bool IsAdministrator { get; }
 
     /// <summary>Set by App.xaml.cs from --scope= argument; consumed once during startup.</summary>
@@ -90,7 +95,8 @@ public partial class MainViewModel : ObservableObject
         RegistryService registry, MenuParserService parser, IconService icons,
         RegistryWriteService writer, IBackupService backup, IOperationLog log,
         IWin11MenuService win11, WinVersionService ver,
-        IFileTypeService fileTypes, IPresetService presets) {
+        IFileTypeService fileTypes, IPresetService presets,
+        IShellContextMenuReader shellMenu) {
         _registry = registry;
         _parser = parser;
         _icons = icons;
@@ -101,6 +107,7 @@ public partial class MainViewModel : ObservableObject
         _ver = ver;
         _fileTypes = fileTypes;
         _presets = presets;
+        _shellMenu = shellMenu;
 
         PreviewView = CollectionViewSource.GetDefaultView(MenuItems);
         PreviewView.Filter = obj => obj is MenuItemViewModel m && (_showExtended || !m.IsExtended);
@@ -190,6 +197,12 @@ public partial class MainViewModel : ObservableObject
             foreach (var item in items)
                 MenuItems.Add(new MenuItemViewModel(item, _icons));
             ShellExtensions = extensions;
+
+            // The shell menu is cached per scope; a (re)load means the registry
+            // may have changed under it, so drop it and warm the new one off the
+            // UI thread while the user is still reading the list.
+            _shellMenu.Invalidate();
+            _ = Task.Run(() => _shellMenu.TryRead(scope, false));
             StatusText = $"{scope.DisplayName} · 共 {MenuItems.Count} 项" + (IsAdministrator ? "" : " · 当前未提权 (asInvoker)");
         }
         catch (OperationCanceledException)
