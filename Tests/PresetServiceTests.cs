@@ -155,4 +155,52 @@ public class PresetServiceTests : IDisposable
         var svc2 = MakeService("{\"version\":\"1.0\",\"presets\":[]}", userJson: File.ReadAllText(outPath));
         Assert.Equal("X", svc2.Load().Presets.Single().DisplayName);
     }
+
+    [Fact]
+    public void ReadEmbeddedDefault_returns_the_shipped_catalog()
+    {
+        var presets = PresetService.ReadEmbeddedDefault();
+        Assert.True(presets.Count >= 30, $"expected the full built-in catalog, got {presets.Count}");
+        Assert.Contains(presets, p => p.VerbName == "notepad" && p.Scope == "AllFiles");
+        Assert.All(presets, p => Assert.False(string.IsNullOrWhiteSpace(p.Command)));
+    }
+
+    [Fact]
+    public void Load_falls_back_to_embedded_presets_when_no_file_beside_exe()
+    {
+        // A single-file publish ships no presets.json at all; the catalog must
+        // still be populated, otherwise the preset page comes up empty.
+        var missing = Path.Combine(_tempDir, "does-not-exist", "presets.json");
+        var userPath = Path.Combine(_tempDir, "user-embedded.json");
+        var svc = new PresetService(_writer, _regWriter, missing, userPath, useEmbeddedDefault: true);
+        var cat = svc.Load();
+        Assert.NotEmpty(cat.Presets);
+        Assert.Equal(PresetService.ReadEmbeddedDefault().Count, cat.Presets.Count);
+    }
+
+    [Fact]
+    public void Load_prefers_a_presets_file_next_to_the_exe_over_the_embedded_copy()
+    {
+        var overrideJson = "{\"version\":\"1.0\",\"presets\":["
+            + "{\"scope\":\"Folder\",\"verbName\":\"override\",\"displayName\":\"Local\",\"command\":\"l.exe\",\"icon\":\"\",\"extended\":false,\"position\":\"Default\",\"description\":\"\",\"isSystem\":false,\"isBuiltIn\":true}"
+            + "]}";
+        var builtInPath = Path.Combine(_tempDir, "presets.json");
+        File.WriteAllText(builtInPath, overrideJson);
+        var svc = new PresetService(_writer, _regWriter, builtInPath,
+            Path.Combine(_tempDir, "user-override.json"), useEmbeddedDefault: true);
+        var cat = svc.Load();
+        Assert.Single(cat.Presets);
+        Assert.Equal("override", cat.Presets[0].VerbName);
+    }
+
+    [Fact]
+    public void Load_keeps_embedded_presets_when_the_local_file_is_corrupt()
+    {
+        var builtInPath = Path.Combine(_tempDir, "presets.json");
+        File.WriteAllText(builtInPath, "{ not json at all");
+        var svc = new PresetService(_writer, _regWriter, builtInPath,
+            Path.Combine(_tempDir, "user-corrupt.json"), useEmbeddedDefault: true);
+        Assert.NotEmpty(svc.Load().Presets);
+        Assert.True(File.Exists(builtInPath + ".bak"));
+    }
 }

@@ -26,9 +26,9 @@ RCMenuManager 是一个基于 WPF (.NET 10) 的桌面工具，让你可以查看
 
 ### 环境要求
 
-- Windows 10 1809+ 或 Windows 11
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)（构建用）
-- 运行发布版需要 .NET 10 桌面运行时（或使用自包含发布）
+- Windows 10 1809+ (x64) 或 Windows 11
+- 构建需要 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- 运行：便携单文件版**无需**任何运行时；框架依赖版需要 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 ### 从源码构建
 
@@ -40,23 +40,35 @@ dotnet build -c Debug
 dotnet run --project RCMenuManager.csproj
 ```
 
-### 发布单文件可执行
+### 发布
 
-框架依赖（体积小，需要用户机器装有 .NET 9 桌面运行时）：
+#### 单文件便携版（推荐分发方式）
+
+```powershell
+dotnet publish RCMenuManager.csproj -p:PublishProfile=portable-win-x64
+```
+
+产物是**唯一一个文件** `publish\portable\RCMenuManager.exe`（约 66 MB）：
+
+- **自包含**：目标机不需要安装 .NET 10 运行时；
+- **零散文件**：预设库 `presets.json` 已嵌入程序集，不再依赖 exe 旁边的文件；
+- **免安装**：拷到任意目录双击即可运行，卸载等于删掉这个 exe；
+- **数据不丢**：用户配置与备份仍写在 `%LocalAppData%\RCMenuManager\`，替换 exe 升级不受影响。
+
+首次启动时 WPF 的原生 DLL（`wpfgfx_cor3` 等）会解包到 `%TEMP%\.net\`，之后复用——这是 .NET 单文件的标准行为，不影响"单文件"分发。
+
+> 想在**不重新编译**的前提下替换预设库：把新的 `Resources\presets.json` 放到 exe 同目录即可，它优先于内嵌副本；文件损坏时会自动改名为 `.bak` 并回落到内嵌副本。
+
+#### 框架依赖版（体积最小）
 
 ```powershell
 dotnet publish RCMenuManager.csproj -c Release -r win-x64 `
     --self-contained false -p:PublishSingleFile=true
 ```
 
-自包含（无需运行时，体积较大）：
+体积约 2 MB，但目标机必须先安装 [.NET 10 桌面运行时](https://dotnet.microsoft.com/download/dotnet/10.0)。
 
-```powershell
-dotnet publish RCMenuManager.csproj -c Release -r win-x64 `
-    --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
-```
-
-产物位于 `bin\Release\net10.0-windows\win-x64\publish\RCMenuManager.exe`。
+产物默认位于 `bin\Release\net10.0-windows\win-x64\publish\`。
 
 ### 运行测试
 

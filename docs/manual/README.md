@@ -47,8 +47,11 @@ dotnet run
 ### 发布
 
 ```bash
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+# 便携单文件（自包含，产物只有一个 exe）
+dotnet publish RCMenuManager.csproj -p:PublishProfile=portable-win-x64
 ```
+
+预设库 `Resources\presets.json` 编译时以 `EmbeddedResource` 嵌入程序集，因此发布目录里不再出现散落的 json 文件；exe 同目录若存在同名文件则优先使用（便于免编译替换预设）。
 
 ## 项目结构
 

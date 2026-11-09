@@ -10,24 +10,35 @@ namespace RCMenuManager.Services;
 
 public sealed class PresetService : IPresetService
 {
+    /// <summary>Logical name of the presets.json embedded in the assembly.</summary>
+    internal const string EmbeddedResourceName = "RCMenuManager.Resources.presets.json";
+
     private readonly IRegistryWriter _writer;
     private readonly RegistryWriteService _regWriter;
     private readonly string _builtInPath;
+    private readonly bool _useEmbeddedDefault;
 
     public string UserPresetsPath { get; }
 
     public PresetService(IRegistryWriter writer, RegistryWriteService regWriter)
         : this(writer, regWriter,
                Path.Combine(AppContext.BaseDirectory, "Resources", "presets.json"),
-               DefaultUserPresetsPath())
+               DefaultUserPresetsPath(),
+               useEmbeddedDefault: true)
     {
     }
 
-    public PresetService(IRegistryWriter writer, RegistryWriteService regWriter, string builtInPath, string userPath)
+    public PresetService(
+        IRegistryWriter writer,
+        RegistryWriteService regWriter,
+        string builtInPath,
+        string userPath,
+        bool useEmbeddedDefault = false)
     {
         _writer = writer;
         _regWriter = regWriter;
         _builtInPath = builtInPath;
+        _useEmbeddedDefault = useEmbeddedDefault;
         UserPresetsPath = userPath;
         Directory.CreateDirectory(Path.GetDirectoryName(userPath)!);
     }
@@ -39,7 +50,7 @@ public sealed class PresetService : IPresetService
     public PresetCatalog Load()
     {
         var byKey = new Dictionary<string, PresetItem>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in ReadSafe(_builtInPath))
+        foreach (var p in ReadBuiltIn())
             byKey[KeyOf(p)] = p;
         foreach (var u in ReadSafe(UserPresetsPath))
             byKey[KeyOf(u)] = u;
@@ -48,6 +59,36 @@ public sealed class PresetService : IPresetService
             Version = "1.0",
             Presets = byKey.Values.OrderBy(p => p.Scope).ThenBy(p => p.VerbName).ToList(),
         };
+    }
+
+    /// <summary>
+    /// Built-in catalog: a presets.json sitting next to the exe wins (lets users
+    /// swap in their own list without a rebuild); otherwise the copy embedded in
+    /// the assembly is used, so a single-file publish has no loose dependency.
+    /// </summary>
+    private List<PresetItem> ReadBuiltIn()
+    {
+        if (!string.IsNullOrEmpty(_builtInPath) && File.Exists(_builtInPath))
+        {
+            var onDisk = ReadSafe(_builtInPath);
+            if (onDisk.Count > 0) return onDisk;
+        }
+        return _useEmbeddedDefault ? ReadEmbeddedDefault() : new List<PresetItem>();
+    }
+
+    /// <summary>Reads the built-in presets compiled into this assembly.</summary>
+    internal static List<PresetItem> ReadEmbeddedDefault()
+    {
+        try
+        {
+            using var stream = typeof(PresetService).Assembly
+                .GetManifestResourceStream(EmbeddedResourceName);
+            return stream is null ? new List<PresetItem>() : ReadStream(stream);
+        }
+        catch
+        {
+            return new List<PresetItem>();
+        }
     }
 
     public bool IsApplied(PresetItem item)
@@ -110,14 +151,19 @@ public sealed class PresetService : IPresetService
         try
         {
             using var stream = File.OpenRead(path);
-            var cat = JsonSerializer.Deserialize<PresetCatalog>(stream, JsonOpts);
-            return cat?.Presets ?? new List<PresetItem>();
+            return ReadStream(stream);
         }
         catch
         {
             try { File.Move(path, path + ".bak", overwrite: true); } catch { }
             return new List<PresetItem>();
         }
+    }
+
+    private static List<PresetItem> ReadStream(Stream stream)
+    {
+        var cat = JsonSerializer.Deserialize<PresetCatalog>(stream, JsonOpts);
+        return cat?.Presets ?? new List<PresetItem>();
     }
 
     private static void WriteAll(string path, PresetCatalog catalog)

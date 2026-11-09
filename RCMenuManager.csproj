@@ -54,14 +54,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Resources\presets.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <!-- presets.json is embedded so a published single-file exe needs nothing
+         beside it. A Resources\presets.json placed next to the exe still wins
+         (see PresetService), so "drop in your own presets" keeps working
+         without a rebuild. -->
+    <None Remove="Resources\presets.json" />
+    <EmbeddedResource Include="Resources\presets.json">
+      <LogicalName>RCMenuManager.Resources.presets.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <!-- Referenced only through the pack:// URI in MainWindow.xaml, so it lives
+         in the assembly's resource stream and must not be copied loose. -->
     <None Remove="Resources\AppLogo.png" />
-    <Resource Include="Resources\AppLogo.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Resource>
+    <Resource Include="Resources\AppLogo.png" />
   </ItemGroup>
 </Project>
