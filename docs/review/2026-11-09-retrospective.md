@@ -401,3 +401,45 @@ Win11 25H2 仍支持 CLSID {86ca1aa0…} 覆盖（未公开行为，微软 Q&A �
 冷读要加载第三方 shell 扩展，`.png` 最慢（本机约 2.5s），`.txt` 约 1.2s，其余 0.2–0.4s；命中缓存后 < 1ms。因此预热时机从「解析完成之后」提前到 `LoadAsync` 开头，与注册表解析并行，右键时通常已预热完。
 
 测试：**125 通过 / 0 失败**（新增 11 条：8 个类型的菜单读取断言、缓存命中、查询路径顺序、感知类型解析）。
+
+---
+
+## 附录 E：桌面与文件夹背景改用原生视图菜单
+
+附录 C 把文件/文件夹/驱动器/扩展名的预览换成了真实 `IContextMenu`，但**桌面**和**文件夹背景**当时没换，理由是 `IShellView::GetItemObject` 直接抛 `NotImplementedException`，于是保留「目录 + 注册表 verb」拼装。截图对比暴露出这个取舍站不住脚：
+
+| 现象 | 真实菜单 | 当时预览 | 原因 |
+|---|---|---|---|
+| 缺少第三方项 | NVIDIA App、NVIDIA 控制面板、在终端中打开 | 无 | 这些来自 `shellex\ContextMenuHandlers`，注册表 verb 里根本没有 |
+| 出现看不懂的名字 | 无 | `EditStickers`、`.SpotlightLearnMore`、`SlideNextImage`、`Slideshow\ContextMenu` | 前三项只有 `ExplorerCommandHandler`、没有 `MUIVerb`/默认值，Explorer 靠 COM 拿标题且按条件隐藏；最后一项是 `DesktopSlideshow` 处理器的 CLSID 名 |
+| 缺常用项 | Open Git GUI/Bash、Open WezTerm、VS、WorkBuddy | 无 | 桌面背景实际会合并 `Directory\Background\shell`，当时只读了 `DesktopBackground\Shell` |
+| 排序/文字不一致 | 查看、排序方式、刷新、粘贴… | 部分缺失 | 这些由**视图**自己插入，不在注册表里 |
+
+### 根因
+
+`GetItemObject` 的 `E_NOTIMPL` 是**接口声明错误**导致的假象，不是 shell 不支持：`IShellView` 继承 `IOleWindow`，声明时漏了 `GetWindow` / `ContextSensitiveHelp` 两槽，整个 vtable 偏移 2 格，实际调用的是 `AddPropertySheetPages` 之类，自然返回 `E_NOTIMPL`。同理 `IShellWindows` 是 dual 接口，必须先声明 4 个 `IDispatch` 槽，否则 `FindWindowSW` 落到 `GetTypeInfoCount` 上——那是直接访问冲突（`0xC0000005`）。
+
+### 现在的取法
+
+| 作用域 | 取视图的方式 |
+|---|---|
+| 桌面 | `CLSID_ShellWindows` → `FindWindowSW(SWC_DESKTOP)` → `IServiceProvider.QueryService(SID_STopLevelBrowser)` → `IShellBrowser.QueryActiveShellView()` |
+| 文件夹背景 | `SHGetDesktopFolder` → `BindToObject` → `IShellFolder::CreateViewObject(IID_IShellView)`（无窗口的游离视图，足够产出背景菜单） |
+| 两者 | `IShellView::GetItemObject(SVGIO_BACKGROUND, IID_IContextMenu)` → `QueryContextMenu` → 遍历 `HMENU` |
+
+### 顺带修掉的两个渲染缺陷
+
+1. **分隔符误判**：`GetMenuState` 会把 `MF_SEPARATOR(0x800)` 混进普通弹出项的返回值（「查看」子菜单报告 `0x810`），于是每一项都被当成分隔线。改为读 `MENUITEMINFO.fType & MFT_SEPARATOR`。
+2. **快捷键标记不生效**：`AccessText` 用 `_` 标记访问键，shell 用 `&`，直接塞原文只会把 `&` 显示出来（`查看(&V)`）。新增 `ToAccessText()` 做转换：`&&` → 字面 `&`，`&X` → `_X`，原有 `_` 转义成 `__`。另外 shell 用 `\t` 分隔「标签 + 快捷键」（如撤销项 `撤消 删除(&U)\tCtrl+Z`），现在拆成两列渲染。
+
+### 验证
+
+渲染出的预览图与真实菜单逐项一致（`docs/review/preview/*-native.png`）：
+
+| 作用域 | 渲染结果 |
+|---|---|
+| 桌面 | 查看(V) / 排序方式(O) / 刷新(E) ─ 粘贴(P) 撤消删除(U) Ctrl+Z / 在终端中打开(T) / 使用 Visual Studio 打开(V) / Open Git GUI / Bash / WezTerm / 用 WorkBuddy 打开 / 用 WorkBuddy AI 打开 ─ NVIDIA App ─ NVIDIA 控制面板 ─ 新建(W) ─ 显示设置(D) / 个性化(R) |
+| 文件夹背景 | 查看(V) / 排序方式(O) / 分组依据(P) / 刷新(E) ─ 自定义文件夹 ─ 粘贴(P) / 撤消删除 ─ VS / Git GUI / Git Bash / WezTerm / WorkBuddy×2 ─ 授予访问权限(G) ─ 新建(W) ─ 属性(R) |
+| `.exe` | 打开(O) 加粗置顶，以管理员身份运行、在记事本中编辑、使用小米互传发送、ToDesk、通过 Code 打开… 属性(R) 收尾 |
+
+测试：**133 通过 / 0 失败**（新增 4 条：桌面菜单来自视图、文件夹背景菜单来自视图、两个作用域都不得出现原始注册表键名）。

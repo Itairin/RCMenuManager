@@ -45,6 +45,11 @@ internal static class PreviewMenuFactory
             // Explorer's rows are ~22px; WPF's default template is tighter and
             // makes a 15-entry menu look cramped.
             MinHeight = 22,
+            // Rows with a keyboard hint need to span the menu so the hint can
+            // sit flush right the way Explorer draws it.
+            HorizontalContentAlignment = node.Shortcut is null
+                ? HorizontalAlignment.Left
+                : HorizontalAlignment.Stretch,
         };
 
         // Icon column priority: the icon the shell itself put on the row wins,
@@ -102,31 +107,86 @@ internal static class PreviewMenuFactory
         return mi;
     }
 
+    /// <summary>
+    /// Shell menu text marks the access key with <c>&amp;</c> (<c>&amp;&amp;</c>
+    /// for a literal one); WPF marks it with <c>_</c>. Underscores already in
+    /// the text have to be doubled so they are not eaten as markers.
+    /// </summary>
+    internal static string ToAccessText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var sb = new System.Text.StringBuilder(text.Length + 4);
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c == '&')
+            {
+                if (i + 1 < text.Length && text[i + 1] == '&') { sb.Append('&'); i++; continue; }
+                if (i + 1 < text.Length) { sb.Append('_').Append(text[i + 1]); i++; continue; }
+                sb.Append('&');
+                continue;
+            }
+            if (c == '_') sb.Append("__");
+            else sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
     private static object BuildHeader(PreviewNode node)
     {
-        if (node.Badge is null) return node.Header;
+        // AccessText underlines a letter marked with "_", while the shell uses
+        // "&" for the same job. Feeding it the raw string shows the "&" itself
+        // ("查看(&V)") instead of Explorer's "查看(V)", so the marker is
+        // translated first.
+        var label = new AccessText
+        {
+            Text = ToAccessText(node.Header),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
 
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        // AccessText so "打开(&O)" renders the way Explorer draws it (O underlined).
-        panel.Children.Add(new AccessText
+        object inline = label;
+        if (node.Badge is not null)
         {
-            Text = node.Header,
-            VerticalAlignment = VerticalAlignment.Center,
-        });
-        panel.Children.Add(new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(0xFB, 0xE7, 0xB6)),
-            CornerRadius = new CornerRadius(2),
-            Padding = new Thickness(4, 0, 4, 0),
-            Margin = new Thickness(8, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
+            var panel = new StackPanel { Orientation = Orientation.Horizontal };
+            panel.Children.Add(label);
+            panel.Children.Add(new Border
             {
-                Text = node.Badge,
-                FontSize = 10,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x7A, 0x4A, 0x00)),
-            },
-        });
-        return panel;
+                Background = new SolidColorBrush(Color.FromRgb(0xFB, 0xE7, 0xB6)),
+                CornerRadius = new CornerRadius(2),
+                Padding = new Thickness(4, 0, 4, 0),
+                Margin = new Thickness(8, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock
+                {
+                    Text = node.Badge,
+                    FontSize = 10,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x7A, 0x4A, 0x00)),
+                },
+            });
+            inline = panel;
+        }
+
+        if (node.Shortcut is null) return inline;
+
+        // The shell stores "<label>\t<shortcut>" and Explorer draws the hint
+        // flush right, so the two halves go into separate columns.
+        var left = (UIElement)inline;
+        var grid = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(left, 0);
+        grid.Children.Add(left);
+
+        var hint = new TextBlock
+        {
+            Text = node.Shortcut,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x6B, 0x6B)),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(24, 0, 0, 0),
+        };
+        Grid.SetColumn(hint, 1);
+        grid.Children.Add(hint);
+        return grid;
     }
 }

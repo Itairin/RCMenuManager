@@ -47,9 +47,26 @@ public sealed class ShellContextMenuReader : IShellContextMenuReader
         IReadOnlyList<ShellMenuNode>? nodes = null;
         try
         {
-            var target = PreviewTarget.Resolve(scope);
-            if (target is not null)
-                nodes = RunSta(() => ShellMenuInterop.Read(target.Value, extendedVerbs));
+            switch (scope.Type)
+            {
+                case ScopeType.Desktop:
+                    nodes = RunSta(() => ShellMenuInterop.ReadBackground(null, extendedVerbs));
+                    break;
+                case ScopeType.FolderBackground:
+                {
+                    var folder = PreviewTarget.BackgroundFolder();
+                    nodes = RunSta(() => ShellMenuInterop.ReadBackground(folder, extendedVerbs));
+                    break;
+                }
+
+                default:
+                {
+                    var target = PreviewTarget.Resolve(scope);
+                    if (target is not null)
+                        nodes = RunSta(() => ShellMenuInterop.Read(target.Value, extendedVerbs));
+                    break;
+                }
+            }
         }
         catch
         {
@@ -72,7 +89,7 @@ public sealed class ShellContextMenuReader : IShellContextMenuReader
     /// stack; the caller may be on any thread, so the work is isolated here.
     /// A stalled third-party handler must not hang the UI, hence the timeout.
     /// </summary>
-    private static IReadOnlyList<ShellMenuNode>? RunSta(Func<IReadOnlyList<ShellMenuNode>> work)
+    private static IReadOnlyList<ShellMenuNode>? RunSta(Func<IReadOnlyList<ShellMenuNode>?> work)
     {
         IReadOnlyList<ShellMenuNode>? result = null;
         Exception? failure = null;
@@ -116,9 +133,8 @@ internal static class PreviewTarget
                     return new ShellMenuInterop.Target(drive + "\\");
                 }
                 default:
-                    // Folder background and the desktop are produced by the
-                    // shell *view*, not by an item, and cannot be reached
-                    // through IShellItem; those keep the catalog layout.
+                    // Any other scope has no item to describe; the callers that
+                    // matter (desktop / folder background) are handled above.
                     return null;
             }
         }
@@ -127,6 +143,13 @@ internal static class PreviewTarget
             return null;
         }
     }
+
+    /// <summary>
+    /// Folder used to describe a "folder background" menu. The verbs there are
+    /// the same for every folder on the machine, so an empty scratch folder is
+    /// enough and nothing on the user's disk is touched.
+    /// </summary>
+    public static string BackgroundFolder() => EnsureSampleFolder();
 
     private static string EnsureSampleFile(string fileName)
     {
@@ -159,7 +182,6 @@ internal static class ShellMenuInterop
     public readonly record struct Target(string Path);
 
     private const uint MF_BYPOSITION = 0x400;
-    private const uint MF_SEPARATOR = 0x800;
     private const uint MF_CHECKED = 0x8;
     private const uint MF_GRAYED = 0x1;
     private const uint MF_DEFAULT = 0x1000;
@@ -168,10 +190,26 @@ internal static class ShellMenuInterop
     private const uint CMF_EXTENDEDVERBS = 0x00000020;
 
     private const int MIIM_BITMAP = 0x00000080;
+    private const int MIIM_FTYPE = 0x00000100;
+    private const int MIIM_STATE = 0x00000001;
+    private const int MIIM_SUBMENU = 0x00000004;
+    private const int MFT_SEPARATOR = 0x00000800;
 
     private static readonly Guid IID_IShellItem = new("43826d1e-e718-42ee-bc55-a1e261c37bfe");
     private static readonly Guid IID_IContextMenu = new("000214e4-0000-0000-c000-000000000046");
+    private static readonly Guid IID_IShellFolder = new("000214e6-0000-0000-c000-000000000046");
+    private static readonly Guid IID_IShellView = new("000214e3-0000-0000-c000-000000000046");
     private static readonly Guid BHID_SFUIObject = new("3981e225-f559-11d3-8e3a-00c04f6837d5");
+
+    private static readonly Guid CLSID_ShellWindows = new("9BA05972-F6A8-11CF-A442-00A0C90A8F39");
+    private static readonly Guid IID_IShellWindows = new("85CB6900-4D95-11CF-960C-0080C7F4EE85");
+    private static readonly Guid IID_IShellBrowser = new("000214E2-0000-0000-C000-000000000046");
+    private static readonly Guid IID_IShellServiceProvider = new("6D5140C1-7436-11CE-8034-00AA006009FA");
+    private static readonly Guid SID_STopLevelBrowser = new("4C96BE40-915C-11CF-99D3-00AA004AE837");
+
+    private const uint CLSCTX_ALL = 0x17;
+    private const int SWC_DESKTOP = 8;
+    private const int SWFO_NEEDDISPATCH = 1;
 
     public static IReadOnlyList<ShellMenuNode> Read(Target target, bool extendedVerbs)
     {
@@ -183,6 +221,102 @@ internal static class ShellMenuInterop
         item.BindToHandler(IntPtr.Zero, ref bhid, ref iidContextMenu, out var ctxObj);
         var ctx = (IContextMenu)ctxObj;
 
+        return Build(ctx, extendedVerbs);
+    }
+
+    /// <summary>
+    /// Reads the menu of a *view background* (the desktop, or the empty area of
+    /// a folder). Those menus are not owned by an item, so the item-based path
+    /// above cannot produce them: the shell view that owns the background is
+    /// asked for its own <c>IContextMenu</c>.
+    /// <paramref name="folderPath"/> null means the desktop.
+    /// </summary>
+    public static IReadOnlyList<ShellMenuNode>? ReadBackground(string? folderPath, bool extendedVerbs)
+    {
+        var view = string.IsNullOrEmpty(folderPath) ? GetDesktopView() : GetFolderBackgroundView(folderPath);
+        if (view is null) return null;
+
+        var iidContextMenu = IID_IContextMenu;
+        view.GetItemObject(0 /* SVGIO_BACKGROUND */, ref iidContextMenu, out var ctxObj);
+        if (ctxObj is not IContextMenu ctx) { return null; }
+        return Build(ctx, extendedVerbs);
+    }
+
+    /// <summary>
+    /// A detached view over the folder. The view has no window, but it still
+    /// owns the background object Explorer would show, so its menu can be read
+    /// without opening an Explorer window.
+    /// </summary>
+    private static IShellView? GetFolderBackgroundView(string folderPath)
+    {
+        var iidFolder = IID_IShellFolder;
+        var iidView = IID_IShellView;
+
+        SHGetDesktopFolder(out var desktop);
+        SHParseDisplayName(folderPath, IntPtr.Zero, out var pidl, 0, out _);
+        if (pidl == IntPtr.Zero) return null;
+
+        IShellFolder folder;
+        try
+        {
+            desktop.BindToObject(pidl, IntPtr.Zero, ref iidFolder, out var folderObj);
+            if (folderObj is not IShellFolder bound) return null;
+            folder = bound;
+        }
+        finally
+        {
+            CoTaskMemFree(pidl);
+        }
+
+        folder.CreateViewObject(IntPtr.Zero, ref iidView, out var viewObj);
+        if (viewObj is not IShellView view) return null;
+        return view;
+    }
+
+    /// <summary>
+    /// The desktop's live view, reached the way Explorer itself reaches it:
+    /// the shell-windows collection hands out the desktop window's dispatch,
+    /// which exposes the top-level browser, which owns the active view.
+    /// </summary>
+    private static IShellView? GetDesktopView()
+    {
+        var clsid = CLSID_ShellWindows;
+        var iidShellWindows = IID_IShellWindows;
+        CoCreateInstance(ref clsid, IntPtr.Zero, CLSCTX_ALL, ref iidShellWindows, out var shellWindowsObj);
+        var shellWindows = (IShellWindows)shellWindowsObj;
+
+        // FindWindowSW dereferences the VARIANT pointers, so NULL crashes the
+        // process. A zeroed VARIANT is VT_EMPTY, which is what the shell expects
+        // for "no location filter".
+        var emptyLoc = Marshal.AllocHGlobal(24);
+        var emptyRoot = Marshal.AllocHGlobal(24);
+        try
+        {
+            for (var i = 0; i < 24; i++)
+            {
+                Marshal.WriteByte(emptyLoc, i, 0);
+                Marshal.WriteByte(emptyRoot, i, 0);
+            }
+            shellWindows.FindWindowSW(emptyLoc, emptyRoot, SWC_DESKTOP, out var desktopHwnd, SWFO_NEEDDISPATCH, out var dispatch);
+            if (dispatch is not IShellServiceProvider provider) { return null; }
+
+            var sid = SID_STopLevelBrowser;
+            var iidBrowser = IID_IShellBrowser;
+            provider.QueryService(ref sid, ref iidBrowser, out var browserObj);
+            if (browserObj is not IShellBrowser browser) { return null; }
+
+            browser.QueryActiveShellView(out var view);
+            return view;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(emptyLoc);
+            Marshal.FreeHGlobal(emptyRoot);
+        }
+    }
+
+    private static IReadOnlyList<ShellMenuNode> Build(IContextMenu ctx, bool extendedVerbs)
+    {
         var hMenu = CreatePopupMenu();
         if (hMenu == IntPtr.Zero) throw new InvalidOperationException("CreatePopupMenu 失败");
         try
@@ -205,8 +339,16 @@ internal static class ShellMenuInterop
         var count = GetMenuItemCount(menu);
         for (var i = 0; i < count; i++)
         {
-            var state = GetMenuState(menu, (uint)i, MF_BYPOSITION);
-            if ((state & MF_SEPARATOR) != 0)
+            // GetMenuState reports MF_SEPARATOR for ordinary popup items built
+            // by the shell (its "查看" submenu comes back as 0x810), so the item
+            // type has to be read from MENUITEMINFO instead.
+            var info = new MENUITEMINFO
+            {
+                cbSize = Marshal.SizeOf<MENUITEMINFO>(),
+                fMask = MIIM_FTYPE | MIIM_STATE | MIIM_SUBMENU,
+            };
+            GetMenuItemInfo(menu, (uint)i, true, ref info);
+            if ((info.fType & MFT_SEPARATOR) != 0)
             {
                 nodes.Add(new ShellMenuNode { IsSeparator = true });
                 continue;
@@ -219,9 +361,9 @@ internal static class ShellMenuInterop
             nodes.Add(new ShellMenuNode
             {
                 Text = text.ToString(),
-                IsEnabled = (state & MF_GRAYED) == 0,
-                IsChecked = (state & MF_CHECKED) != 0,
-                IsDefault = (state & MF_DEFAULT) != 0,
+                IsEnabled = (info.fState & MF_GRAYED) == 0,
+                IsChecked = (info.fState & MF_CHECKED) != 0,
+                IsDefault = (info.fState & MF_DEFAULT) != 0,
                 Icon = ReadIcon(menu, i),
                 Children = sub == IntPtr.Zero ? Array.Empty<ShellMenuNode>() : Walk(sub, depth + 1),
             });
@@ -285,9 +427,6 @@ internal static class ShellMenuInterop
     private static extern int GetMenuString(IntPtr hMenu, uint id, StringBuilder text, int maxCount, uint flags);
 
     [DllImport("user32.dll")]
-    private static extern uint GetMenuState(IntPtr hMenu, uint id, uint flags);
-
-    [DllImport("user32.dll")]
     private static extern bool GetMenuItemInfo(IntPtr hMenu, uint item, bool byPosition, ref MENUITEMINFO info);
 
     [DllImport("user32.dll")]
@@ -301,6 +440,79 @@ internal static class ShellMenuInterop
         string path, IntPtr pbc, ref Guid riid,
         [MarshalAs(UnmanagedType.Interface)] out IShellItem item);
 
+    [DllImport("shell32.dll", PreserveSig = false)]
+    private static extern void SHGetDesktopFolder(
+        [MarshalAs(UnmanagedType.Interface)] out IShellFolder folder);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHParseDisplayName(
+        string name, IntPtr pbc, out IntPtr pidl, uint sfgaoIn, out uint sfgaoOut);
+
+    [DllImport("ole32.dll")]
+    private static extern void CoTaskMemFree(IntPtr pv);
+
+    [DllImport("ole32.dll", PreserveSig = false)]
+    private static extern void CoCreateInstance(
+        ref Guid clsid, IntPtr outer, uint clsContext, ref Guid riid,
+        [MarshalAs(UnmanagedType.Interface)] out object ppv);
+
+    /// <summary>
+    /// Dual interface (derives from IDispatch), so the four IDispatch slots must
+    /// be declared first — otherwise every call lands one slot too early.
+    /// </summary>
+    [ComImport, Guid("85CB6900-4D95-11CF-960C-0080C7F4EE85"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellWindows
+    {
+        void GetTypeInfoCount(out uint count);
+        void GetTypeInfo(uint typeInfo, uint lcid, out IntPtr info);
+        void GetIDsOfNames(ref Guid riid,
+            [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPWStr)] string[] names,
+            uint count, uint lcid, [MarshalAs(UnmanagedType.LPArray)] int[] dispIds);
+        void Invoke(int dispIdMember, ref Guid riid, uint lcid, ushort flags,
+            IntPtr parameters, IntPtr result, IntPtr exceptionInfo);
+
+        void get_Count(out int count);
+        void Item(int index, [MarshalAs(UnmanagedType.Interface)] out object dispatch);
+        void _NewEnum(out IntPtr enumVariant);
+        void Register(IntPtr dispatch, int hwnd, int swClass, out int cookie);
+        void RegisterPending(int threadId, IntPtr loc, IntPtr root, int swClass, out int cookie);
+        void Revoke(int cookie);
+        void OnNavigate(int cookie, IntPtr loc);
+        void OnActivated(int cookie, bool active);
+        void FindWindowSW(IntPtr loc, IntPtr locRoot, int swClass, out int hwnd, int options,
+            [MarshalAs(UnmanagedType.Interface)] out object dispatch);
+        void OnCreate(IntPtr dispatch);
+        void ProcessAttachDetach(bool attach);
+    }
+
+    [ComImport, Guid("6D5140C1-7436-11CE-8034-00AA006009FA"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellServiceProvider
+    {
+        void QueryService(ref Guid service, ref Guid riid,
+            [MarshalAs(UnmanagedType.Interface)] out object ppv);
+    }
+
+    /// <summary>Inherits IOleWindow, so the two window methods come first.</summary>
+    [ComImport, Guid("000214E2-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellBrowser
+    {
+        void GetWindow(out IntPtr hwnd);
+        void ContextSensitiveHelp(bool enterMode);
+        void InsertMenusSB(IntPtr hmenuShared, IntPtr menuWidths);
+        void SetMenuSB(IntPtr hmenuShared, IntPtr holeMenu, IntPtr hwndOwner);
+        void RemoveMenusSB(IntPtr hmenuShared);
+        void SetStatusTextSB([MarshalAs(UnmanagedType.LPWStr)] string text);
+        void EnableModelessSB(bool enable);
+        void TranslateAcceleratorSB(IntPtr msg, ushort id);
+        void BrowseObject(IntPtr pidl, uint flags);
+        void GetViewStateStream(uint mode, out IntPtr stream);
+        void GetControlWindow(uint id, out IntPtr hwnd);
+        void SendControlMsg(uint id, uint msg, IntPtr wParam, IntPtr lParam, out IntPtr result);
+        void QueryActiveShellView([MarshalAs(UnmanagedType.Interface)] out IShellView view);
+        void OnViewWindowActive(IntPtr view);
+        void SetToolbarItems(IntPtr buttons, uint count, uint flags);
+    }
+
     [ComImport, Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IShellItem
     {
@@ -309,6 +521,50 @@ internal static class ShellMenuInterop
         void GetDisplayName(uint sigdnName, out IntPtr name);
         void GetAttributes(uint mask, out uint attrs);
         void Compare(IShellItem psi, uint hint, out int order);
+    }
+
+    /// <summary>
+    /// Only <c>CreateViewObject</c> and <c>BindToObject</c> are used; the other
+    /// slots must still be declared to keep the vtable offsets correct.
+    /// </summary>
+    [ComImport, Guid("000214e6-0000-0000-c000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellFolder
+    {
+        void ParseDisplayName(IntPtr hwnd, IntPtr pbc, [MarshalAs(UnmanagedType.LPWStr)] string name,
+            out uint eaten, out IntPtr pidl, out uint attrs);
+        void EnumObjects(IntPtr hwnd, uint flags, out IntPtr enumIdList);
+        void BindToObject(IntPtr pidl, IntPtr pbc, ref Guid riid,
+            [MarshalAs(UnmanagedType.Interface)] out object ppv);
+        void BindToStorage(IntPtr pidl, IntPtr pbc, ref Guid riid, out IntPtr ppv);
+        void CompareIDs(IntPtr lParam, IntPtr pidl1, IntPtr pidl2);
+        void CreateViewObject(IntPtr hwndOwner, ref Guid riid,
+            [MarshalAs(UnmanagedType.Interface)] out object ppv);
+        void GetAttributesOf(uint count, IntPtr pidls, ref uint attrs);
+        void GetUIObjectOf(IntPtr hwnd, uint count, IntPtr pidls, ref Guid riid, IntPtr reserved,
+            [MarshalAs(UnmanagedType.Interface)] out object ppv);
+        void GetDisplayNameOf(IntPtr pidl, uint flags, out IntPtr name);
+        void SetNameOf(IntPtr hwnd, IntPtr pidl, [MarshalAs(UnmanagedType.LPWStr)] string name,
+            uint flags, out IntPtr newPidl);
+    }
+
+    /// <summary>Inherits IOleWindow, so the two window methods come first.</summary>
+    [ComImport, Guid("000214e3-0000-0000-c000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellView
+    {
+        void GetWindow(out IntPtr hwnd);
+        void ContextSensitiveHelp(bool enterMode);
+        void TranslateAccelerator(IntPtr msg);
+        void EnableModeless(bool enable);
+        void UIActivate(uint state);
+        void Refresh();
+        void CreateViewWindow(IntPtr prevView, IntPtr settings, IntPtr rect, IntPtr hwndParent, out IntPtr hwndView);
+        void DestroyViewWindow();
+        void GetCurrentInfo(out IntPtr fs);
+        void AddPropertySheetPages(uint reserved, IntPtr callback, IntPtr lParam);
+        void SaveViewState();
+        void SelectItem(IntPtr pidl, uint flags);
+        void GetItemObject(uint item, ref Guid riid,
+            [MarshalAs(UnmanagedType.Interface)] out object ppv);
     }
 
     [ComImport, Guid("000214e4-0000-0000-c000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

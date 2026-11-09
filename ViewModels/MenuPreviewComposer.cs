@@ -39,6 +39,12 @@ public sealed class PreviewNode
     /// <summary>Right-side badge ("Shift" for Extended verbs).</summary>
     public string? Badge { get; init; }
 
+    /// <summary>
+    /// Keyboard hint the shell puts after a tab (e.g. "Ctrl+Z" on undo).
+    /// Explorer right-aligns it, so it is kept apart from the label.
+    /// </summary>
+    public string? Shortcut { get; init; }
+
     /// <summary>Icon taken straight from the shell's own menu item.</summary>
     public ImageSource? Icon { get; init; }
 
@@ -143,10 +149,20 @@ public static class MenuPreviewComposer
     {
         if (node.IsSeparator) return PreviewNode.Separator();
 
-        lookup.TryGetValue(NormalizeText(node.Text), out var match);
+        var label = node.Text;
+        string? shortcut = null;
+        var tab = label.IndexOf('\t');
+        if (tab >= 0)
+        {
+            shortcut = label[(tab + 1)..].Trim();
+            label = label[..tab].TrimEnd();
+        }
+
+        lookup.TryGetValue(NormalizeText(label), out var match);
         return new PreviewNode
         {
-            Header = node.Text,
+            Header = label,
+            Shortcut = string.IsNullOrEmpty(shortcut) ? null : shortcut,
             Item = match,
             IsBuiltIn = match is null,
             IsEnabled = node.IsEnabled,

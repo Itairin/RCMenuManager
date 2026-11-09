@@ -201,3 +201,81 @@ public class NativeShellMenuTests
     }
 
 }
+
+public class BackgroundShellMenuTests
+{
+    private readonly ITestOutputHelper _out;
+    public BackgroundShellMenuTests(ITestOutputHelper o) => _out = o;
+
+    private static IReadOnlyList<ShellMenuNode>? ReadDesktop()
+        => ShellContextMenuReader.Instance.TryRead(MenuScope.Desktop, extendedVerbs: false);
+
+    private static IReadOnlyList<ShellMenuNode>? ReadFolderBackground()
+        => ShellContextMenuReader.Instance.TryRead(MenuScope.FolderBackground, extendedVerbs: false);
+
+    /// <summary>
+    /// The desktop background menu used to come from a hand-written catalog plus
+    /// whatever verbs sat in DesktopBackground\Shell, which missed every shell
+    /// extension (NVIDIA, terminals) and surfaced registry keys Windows never
+    /// shows. It now comes from the live desktop view, so it must look exactly
+    /// like the menu Explorer pops up.
+    /// </summary>
+    [Fact]
+    public void Desktop_menu_comes_from_the_shell_view()
+    {
+        var nodes = ReadDesktop();
+        Assert.NotNull(nodes);
+        var texts = nodes!.Where(n => !n.IsSeparator).Select(n => n.Text).ToList();
+        foreach (var t in texts) _out.WriteLine(t);
+
+        Assert.NotEmpty(texts);
+        // "查看" and "排序方式" are submenus the view adds itself; their presence
+        // is what proves we asked the view rather than the registry.
+        Assert.True(nodes.Count(n => n.Children.Count > 0) >= 2,
+            "桌面背景菜单应至少包含两个子菜单（查看 / 排序方式）");
+    }
+
+    [Fact]
+    public void Folder_background_menu_comes_from_the_shell_view()
+    {
+        var nodes = ReadFolderBackground();
+        Assert.NotNull(nodes);
+        var texts = nodes!.Where(n => !n.IsSeparator).Select(n => n.Text).ToList();
+        foreach (var t in texts) _out.WriteLine(t);
+
+        Assert.NotEmpty(texts);
+        Assert.True(nodes.Count(n => n.Children.Count > 0) >= 2,
+            "文件夹背景菜单应至少包含两个子菜单（查看 / 排序方式）");
+    }
+
+    /// <summary>
+    /// Regression guard for "看不懂的内容": a scope with no readable title must
+    /// never surface a bare registry key such as "EditStickers" or ".Spotlight...".
+    /// </summary>
+    [Theory]
+    [InlineData("desktop")]
+    [InlineData("folder-background")]
+    public void Background_menu_has_no_raw_registry_key_names(string which)
+    {
+        var nodes = which == "desktop" ? ReadDesktop() : ReadFolderBackground();
+        Assert.NotNull(nodes);
+
+        foreach (var node in nodes!.Where(n => !n.IsSeparator))
+        {
+            Assert.False(string.IsNullOrWhiteSpace(node.Text), "菜单项没有标题，用户看不懂");
+            Assert.DoesNotContain('\\', node.Text);
+            Assert.False(node.Text.StartsWith('.'), $"菜单项泄漏了注册表键名: {node.Text}");
+            Assert.False(IsBareIdentifier(node.Text), $"菜单项泄漏了注册表键名: {node.Text}");
+        }
+    }
+
+    /// <summary>True for things like "EditStickers" / "SlideshowContextMenu".</summary>
+    private static bool IsBareIdentifier(string text)
+    {
+        if (text.Length < 4) return false;
+        if (text.Contains(' ') || text.Contains('&') || text.Contains('(')) return false;
+        var first = text[0];
+        if (!char.IsLetter(first) || !char.IsUpper(first)) return false;
+        return text.All(char.IsLetterOrDigit);
+    }
+}
