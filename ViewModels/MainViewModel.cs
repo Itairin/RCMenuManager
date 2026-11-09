@@ -181,6 +181,14 @@ public partial class MainViewModel : ObservableObject
         StatusText = $"正在加载 {scope.DisplayName} ...";
         MenuItems.Clear();
         ShellExtensions = Array.Empty<ShellExtensionInfo>();
+
+        // The shell menu is cached per scope; a (re)load means the registry may
+        // have changed under it, so drop it and start rebuilding immediately —
+        // in parallel with the registry parse — so the first right-click in the
+        // Preview tab usually hits a warm cache (a cold read can take ~2s when
+        // image/video shell extensions have to be loaded).
+        _shellMenu.Invalidate();
+        _ = Task.Run(() => _shellMenu.TryRead(scope, false));
         try
         {
             var token = cts.Token;
@@ -197,12 +205,6 @@ public partial class MainViewModel : ObservableObject
             foreach (var item in items)
                 MenuItems.Add(new MenuItemViewModel(item, _icons));
             ShellExtensions = extensions;
-
-            // The shell menu is cached per scope; a (re)load means the registry
-            // may have changed under it, so drop it and warm the new one off the
-            // UI thread while the user is still reading the list.
-            _shellMenu.Invalidate();
-            _ = Task.Run(() => _shellMenu.TryRead(scope, false));
             StatusText = $"{scope.DisplayName} · 共 {MenuItems.Count} 项" + (IsAdministrator ? "" : " · 当前未提权 (asInvoker)");
         }
         catch (OperationCanceledException)

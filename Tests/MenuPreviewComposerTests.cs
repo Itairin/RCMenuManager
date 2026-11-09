@@ -366,7 +366,7 @@ public class MenuPreviewComposerTests
             showExtended: false,
             clipboardHasFiles: true);
 
-        Assert.Single(nodes.Where(n => n.Header.StartsWith("个性化", StringComparison.Ordinal)));
+        Assert.Single(nodes, n => n.Header.StartsWith("个性化", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -39,6 +39,50 @@ public class NativeShellMenuTests
         Assert.True(texts.Count > 6, "菜单项太少，可能没有真正读到 shell 菜单");
     }
 
+    /// <summary>
+    /// The reader must work for every kind of target, not just .exe: text gets
+    /// 打开/编辑 from SystemFileAssociations\text, images get 打印/设为桌面背景,
+    /// and an unassociated extension must fall back to a bare 打开方式 menu.
+    /// </summary>
+    [Theory]
+    [InlineData(".txt", "txtfile", "打开")]
+    [InlineData(".png", "pngfile", "打开")]
+    [InlineData(".jpg", "jpegfile", "打开")]
+    [InlineData(".zip", "CompressedFolder", "打开")]
+    [InlineData(".pdf", null, "打开")]
+    [InlineData(".html", "htmlfile", "打开")]
+    [InlineData(".ps1", null, "打开")]
+    [InlineData(".xyz", null, "打开方式")]
+    public void Other_file_types_read_the_real_shell_menu(string extension, string? progId, string firstRow)
+    {
+        var scope = MenuScope.ForExtension(extension, progId);
+        var nodes = ShellContextMenuReader.Instance.TryRead(scope, extendedVerbs: false);
+
+        Assert.NotNull(nodes);
+        var texts = nodes!.Where(n => !n.IsSeparator).Select(n => n.Text).ToList();
+        foreach (var t in texts) _out.WriteLine($"{extension}: {t}");
+
+        Assert.True(texts.Count >= 10, $"{extension} 只读到 {texts.Count} 项，菜单不完整");
+        Assert.StartsWith(firstRow, texts[0]);
+        Assert.Equal("属性(&R)", texts[^1]);
+        Assert.Contains(nodes, n => n.IsSeparator);
+        Assert.All(texts, t => Assert.False(string.IsNullOrWhiteSpace(t)));
+    }
+
+    [Fact]
+    public void Second_read_of_the_same_scope_comes_from_cache()
+    {
+        var scope = MenuScope.ForExtension(".png", "pngfile");
+        ShellContextMenuReader.Instance.TryRead(scope, false);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var again = ShellContextMenuReader.Instance.TryRead(scope, false);
+        sw.Stop();
+
+        Assert.NotNull(again);
+        Assert.True(sw.ElapsedMilliseconds < 100, $"缓存未命中，二次读取耗时 {sw.ElapsedMilliseconds}ms");
+    }
+
     [Fact]
     public void Native_rows_link_back_to_editable_verbs()
     {

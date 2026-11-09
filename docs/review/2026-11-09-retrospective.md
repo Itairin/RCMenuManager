@@ -359,3 +359,45 @@ Win11 25H2 仍支持 CLSID {86ca1aa0…} 覆盖（未公开行为，微软 Q&A �
 - **桌面 / 文件夹背景**：这两类菜单由 shell 视图（`IShellView::GetItemObject(SVGIO_BACKGROUND)`）产生，`IShellItem` 路径拿不到，仍走 catalog（顺序与分组按真实菜单校准，但第三方背景项只能靠注册表拼接）。
 - **菜单行内自绘图标**（`HBMMENU_CALLBACK`）读不到位图。
 - 占位对象决定了个别上下文相关项：例如文件放在用户目录会多出「授予访问权限」，「固定到任务栏」则取决于对象是否可固定。
+
+---
+
+## 附录 D：其他文件类型的验证（0.7.2，2026-11-09）
+
+### 顺带修掉的一个真问题
+
+验证 `.txt` 时发现：预览里能看到「打开 / 编辑」，但左侧列表只有 1 项——这两个 verb 存在 `HKCR\SystemFileAssociations\text\shell`，既不在 `txtfile\shell` 也不在 `.txt\shell` 里。Explorer 的合并顺序是：
+
+```
+.ext\shell → SystemFileAssociations\.ext\shell → ProgID\shell
+  → SystemFileAssociations\<ProgID>\shell → SystemFileAssociations\<PerceivedType>\shell
+  → *\shell → AllFilesystemObjects\shell
+```
+
+`RegistryService` 只走到第 4 步，于是「看得见但改不了」。现已补齐后三步（`PerceivedType` 从扩展名键读，缺失时回退 ProgID），并新增 `RegistryServiceTests` 锁住这个顺序。效果：`.txt` 的可编辑项从 1 → 13，`.png` → 14，`.zip` 的「打开」也能对回 `Open` verb。
+
+### 逐类型核对
+
+用同一套 `IContextMenu` 读取链路，对本机各类型分别取菜单（占位对象：`%LOCALAPPDATA%\RCMenuManager\preview\sample<ext>`）：
+
+| 类型 | 菜单项数 | 首项 | 可映射回可编辑项（示例） | 备注 |
+|---|---|---|---|---|
+| `.exe` | 24 | 打开(O) | 以管理员身份运行、固定到"开始" | 无「打开方式」（Explorer 同） |
+| `.txt` | 27 | 打开(O) | 打开、编辑、转换为PDF格式、添加到收藏夹 | 打开/编辑来自 `SystemFileAssociations\text` |
+| `.png` / `.jpg` | 38 | 打开(O) | 设置为桌面背景、打印、添加到收藏夹 | 含「向右/向左旋转」「播放到设备」 |
+| `.pdf` | 30 | 打开(O) | 编辑、打印、邮箱大师 PDF 编辑 | 「打开方式」在中间位置（Explorer 同） |
+| `.zip` | 27 | 打开(O) | 打开(Open)、全部解压缩…、转换为PDF格式 | 「全部解压缩」为 shell 扩展项 |
+| `.html` | 25 | 打开(O) | 添加到收藏夹、通过 Code 打开 | — |
+| `.docx` | 30 | 打开(O) | 编辑、新建、打印 | 「打开方式(H)…」带省略号 |
+| `.ps1` | 27 | 打开(O) | 编辑、使用 PowerShell 运行 | 后者是 `Windows.PowerShell.Run` verb |
+| `.xyz`（无关联） | 24 | 打开方式(H) | 仅 shell 通用项 | 无关联时菜单只剩「打开方式」 |
+| 驱动器 | 17 | 打开(O) | 固定到快速访问、启用 BitLocker、格式化 | 有「重命名」「复制」无「剪切」 |
+| 文件与文件夹 | 25 | 打开(O) | 添加到收藏夹、发送到 Sunshine | 占位对象是文件，故有「打开方式」 |
+
+所有类型都以「属性(R)」收尾，分组位置与真实右键一致。
+
+### 性能
+
+冷读要加载第三方 shell 扩展，`.png` 最慢（本机约 2.5s），`.txt` 约 1.2s，其余 0.2–0.4s；命中缓存后 < 1ms。因此预热时机从「解析完成之后」提前到 `LoadAsync` 开头，与注册表解析并行，右键时通常已预热完。
+
+测试：**125 通过 / 0 失败**（新增 11 条：8 个类型的菜单读取断言、缓存命中、查询路径顺序、感知类型解析）。
