@@ -165,6 +165,19 @@ public class PresetServiceTests : IDisposable
         Assert.All(presets, p => Assert.False(string.IsNullOrWhiteSpace(p.Command)));
     }
 
+    /// <summary>
+    /// The catalog ships inside the exe, so it is used on machines that are not
+    /// the build machine. A hard-coded "C:\Program Files\..." would silently
+    /// point at nothing there; environment-variable forms (%ProgramFiles%,
+    /// %SystemRoot%, %LOCALAPPDATA%) resolve on whatever machine runs it.
+    /// </summary>
+    [Fact]
+    public void Built_in_presets_avoid_machine_specific_absolute_paths()
+    {
+        foreach (var preset in PresetService.ReadEmbeddedDefault())
+            Assert.DoesNotMatch(@"[A-Za-z]:\\", preset.Command);
+    }
+
     [Fact]
     public void Load_falls_back_to_embedded_presets_when_no_file_beside_exe()
     {
