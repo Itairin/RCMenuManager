@@ -16,17 +16,34 @@ internal static class PreviewMenuFactory
     internal static readonly FontFamily MenuFont = new("Segoe UI");
     internal const double MenuFontSize = 12;
 
-    internal static ContextMenu Create(IReadOnlyList<PreviewNode> nodes, MainViewModel? vm)
+    internal static ContextMenu Create(IReadOnlyList<PreviewNode> nodes, MainViewModel? vm, bool simplified = false)
     {
         var menu = new ContextMenu
         {
             FontFamily = MenuFont,
             FontSize = MenuFontSize,
         };
+
+        // When the shell could not build the menu, the rows below come from the
+        // built-in catalog and are therefore an approximation. Saying so inside
+        // the popup is the only place the user is actually looking.
+        if (simplified)
+        {
+            menu.Items.Add(new MenuItem
+            {
+                Header = SimplifiedNotice,
+                IsEnabled = false,
+                FontWeight = FontWeights.Normal,
+            });
+            menu.Items.Add(new Separator { Margin = new Thickness(26, 4, 8, 4) });
+        }
+
         foreach (var node in nodes)
             menu.Items.Add(BuildNode(node, vm));
         return menu;
     }
+
+    internal const string SimplifiedNotice = "系统菜单读取失败，以下为简化预览（可能缺少第三方扩展项）";
 
     internal static object BuildNode(PreviewNode node, MainViewModel? vm)
     {
@@ -54,6 +71,9 @@ internal static class PreviewMenuFactory
 
         // Icon column priority: the icon the shell itself put on the row wins,
         // then the check glyph of view/sort entries, then the verb's own icon.
+        // The verb icon used to be assigned unconditionally, which overwrote a
+        // shell-provided bitmap with the (often older) registry icon and made
+        // the row differ from the real menu.
         if (node.Icon is not null)
         {
             mi.Icon = new Image
@@ -79,6 +99,16 @@ internal static class PreviewMenuFactory
                 VerticalAlignment = VerticalAlignment.Center,
             };
         }
+        else if (node.Item?.Icon is not null)
+        {
+            mi.Icon = new Image
+            {
+                Source = node.Item.Icon,
+                Width = 16,
+                Height = 16,
+                SnapsToDevicePixels = true,
+            };
+        }
 
         // Explorer renders the default verb (Open) semibold.
         if (node.IsDefault)
@@ -88,17 +118,6 @@ internal static class PreviewMenuFactory
         {
             mi.Command = vm.SelectPreviewItemCommand;
             mi.CommandParameter = node.Item;
-        }
-
-        if (node.Item?.Icon is not null)
-        {
-            mi.Icon = new Image
-            {
-                Source = node.Item.Icon,
-                Width = 16,
-                Height = 16,
-                SnapsToDevicePixels = true,
-            };
         }
 
         foreach (var child in node.Children)

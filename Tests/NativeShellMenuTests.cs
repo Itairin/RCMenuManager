@@ -83,6 +83,48 @@ public class NativeShellMenuTests
         Assert.True(sw.ElapsedMilliseconds < 100, $"缓存未命中，二次读取耗时 {sw.ElapsedMilliseconds}ms");
     }
 
+    /// <summary>
+    /// Invalidate is what a registry write calls before the preview is rebuilt.
+    /// If it did not really drop the cached menu the preview would keep showing
+    /// the state from before the edit.
+    /// </summary>
+    [Fact]
+    public void Invalidate_forces_the_shell_to_be_asked_again()
+    {
+        var reader = new ShellContextMenuReader();
+        var scope = MenuScope.ForExtension(".txt", "txtfile");
+
+        var first = reader.TryRead(scope, false);
+        Assert.NotNull(first);
+        Assert.Same(first, reader.TryRead(scope, false));
+
+        reader.Invalidate();
+
+        var second = reader.TryRead(scope, false);
+        Assert.NotNull(second);
+        Assert.NotSame(first, second);
+    }
+
+    /// <summary>
+    /// The Shift menu is a separate cache entry. Warming only the normal variant
+    /// made the first right-click after ticking "显示 Shift 项" do a full cold
+    /// read on the UI thread; both are prewarmed now, and both must be distinct.
+    /// </summary>
+    [Fact]
+    public void Extended_verbs_are_cached_apart_from_the_normal_menu()
+    {
+        var reader = new ShellContextMenuReader();
+        var scope = MenuScope.ForExtension(".txt", "txtfile");
+
+        var normal = reader.TryRead(scope, false);
+        var extended = reader.TryRead(scope, true);
+
+        Assert.NotNull(normal);
+        Assert.NotNull(extended);
+        Assert.NotSame(normal, extended);
+        Assert.Same(extended, reader.TryRead(scope, true));
+    }
+
     [Fact]
     public void Native_rows_link_back_to_editable_verbs()
     {

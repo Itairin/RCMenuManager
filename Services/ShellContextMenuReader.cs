@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -33,55 +34,131 @@ public sealed class ShellContextMenuReader : IShellContextMenuReader
 {
     public static ShellContextMenuReader Instance { get; } = new();
 
+    /// <summary>
+    /// A failure is remembered for this long so a handler that hangs (the read
+    /// is abandoned after 10s) is not retried on every single right-click.
+    /// After it expires the shell is asked again, so a transient stall — a
+    /// busy disk, a handler that was still loading at startup — heals itself
+    /// instead of degrading the preview for the rest of the session.
+    /// </summary>
+    private static readonly TimeSpan FailureCooldown = TimeSpan.FromSeconds(30);
+
     private readonly object _gate = new();
-    private readonly Dictionary<string, IReadOnlyList<ShellMenuNode>?> _cache = new();
+    private readonly Dictionary<string, IReadOnlyList<ShellMenuNode>> _cache = new();
+    private readonly Dictionary<string, DateTime> _failedAt = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _readGates = new();
+    private int _generation;
 
     public IReadOnlyList<ShellMenuNode>? TryRead(MenuScope scope, bool extendedVerbs)
     {
         var key = scope.ScopeId + (extendedVerbs ? "|ext" : "|norm");
-        lock (_gate)
-        {
-            if (_cache.TryGetValue(key, out var cached)) return cached;
-        }
+        if (TryGetCached(key, out var cached)) return cached;
 
-        IReadOnlyList<ShellMenuNode>? nodes = null;
+        // One read per key at a time. The UI thread (right-click) and the
+        // background prewarm both want the same menu right after startup;
+        // without this they would each load every shell extension twice.
+        var gate = _readGates.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+        gate.Wait();
         try
         {
-            switch (scope.Type)
-            {
-                case ScopeType.Desktop:
-                    nodes = RunSta(() => ShellMenuInterop.ReadBackground(null, extendedVerbs));
-                    break;
-                case ScopeType.FolderBackground:
-                {
-                    var folder = PreviewTarget.BackgroundFolder();
-                    nodes = RunSta(() => ShellMenuInterop.ReadBackground(folder, extendedVerbs));
-                    break;
-                }
+            // The winner may already have filled the cache while we waited.
+            if (TryGetCached(key, out cached)) return cached;
 
-                default:
+            // Taken right before the shell is asked, not before the wait: this
+            // is the point the answer starts to be derived from. If a registry
+            // write invalidates while the read is running, the result is stale
+            // and must not be published into the cache.
+            var generation = Volatile.Read(ref _generation);
+
+            IReadOnlyList<ShellMenuNode>? nodes;
+            try
+            {
+                nodes = Read(scope, extendedVerbs);
+            }
+            catch
+            {
+                // Any shell failure (locked-down machine, no such class) falls
+                // back to the hand-built catalog instead of breaking the preview.
+                nodes = null;
+            }
+
+            lock (_gate)
+            {
+                if (generation != _generation)
                 {
-                    var target = PreviewTarget.Resolve(scope);
-                    if (target is not null)
-                        nodes = RunSta(() => ShellMenuInterop.Read(target.Value, extendedVerbs));
-                    break;
+                    // Superseded by an invalidate: hand the result to the caller
+                    // but keep it out of the cache.
+                    return nodes;
+                }
+                if (nodes is { Count: > 0 })
+                {
+                    // Empty / null results are *not* cached as menus: they are
+                    // recorded as failures with an expiry instead.
+                    _cache[key] = nodes;
+                    _failedAt.Remove(key);
+                }
+                else
+                {
+                    _failedAt[key] = DateTime.UtcNow;
                 }
             }
+            return nodes;
         }
-        catch
+        finally
         {
-            // Any shell failure (locked-down machine, no such class) falls back
-            // to the hand-built catalog instead of breaking the preview.
-            nodes = null;
+            gate.Release();
         }
+    }
 
-        lock (_gate) _cache[key] = nodes;
-        return nodes;
+    private bool TryGetCached(string key, out IReadOnlyList<ShellMenuNode>? nodes)
+    {
+        lock (_gate)
+        {
+            if (_cache.TryGetValue(key, out var hit))
+            {
+                nodes = hit;
+                return true;
+            }
+            if (_failedAt.TryGetValue(key, out var at) && DateTime.UtcNow - at < FailureCooldown)
+            {
+                nodes = null;
+                return true;
+            }
+            nodes = null;
+            return false;
+        }
+    }
+
+    private static IReadOnlyList<ShellMenuNode>? Read(MenuScope scope, bool extendedVerbs)
+    {
+        switch (scope.Type)
+        {
+            case ScopeType.Desktop:
+                return RunSta(() => ShellMenuInterop.ReadBackground(null, extendedVerbs));
+            case ScopeType.FolderBackground:
+            {
+                var folder = PreviewTarget.BackgroundFolder();
+                return RunSta(() => ShellMenuInterop.ReadBackground(folder, extendedVerbs));
+            }
+            default:
+            {
+                var target = PreviewTarget.Resolve(scope);
+                return target is null ? null : RunSta(() => ShellMenuInterop.Read(target.Value, extendedVerbs));
+            }
+        }
     }
 
     public void Invalidate()
     {
-        lock (_gate) _cache.Clear();
+        lock (_gate)
+        {
+            _cache.Clear();
+            // A pending cooldown is dropped too: the caller usually invalidates
+            // right after writing the registry, and the whole point of the
+            // invalidate is "try again now".
+            _failedAt.Clear();
+            _generation++;
+        }
     }
 
     /// <summary>

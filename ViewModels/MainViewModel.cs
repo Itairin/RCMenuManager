@@ -187,8 +187,17 @@ public partial class MainViewModel : ObservableObject
         // in parallel with the registry parse — so the first right-click in the
         // Preview tab usually hits a warm cache (a cold read can take ~2s when
         // image/video shell extensions have to be loaded).
+        //
+        // Both variants are warmed: the normal menu and the Shift menu are
+        // cached separately, and reading only the normal one meant the first
+        // right-click after ticking "显示 Shift 项" blocked the UI thread for a
+        // full cold read. Doing it here keeps that cost off the UI thread.
         _shellMenu.Invalidate();
-        _ = Task.Run(() => _shellMenu.TryRead(scope, false));
+        _ = Task.Run(() =>
+        {
+            _shellMenu.TryRead(scope, false);
+            _shellMenu.TryRead(scope, true);
+        });
         try
         {
             var token = cts.Token;

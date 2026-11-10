@@ -29,10 +29,11 @@ public partial class ContextMenuPreview : UserControl
         if (DataContext is not MainViewModel vm || vm.SelectedScope is null) return;
 
         var native = vm.ShellMenu.TryRead(vm.SelectedScope.Scope, vm.ShowExtended);
-        var nodes = native is { Count: > 0 }
+        var simplified = native is not { Count: > 0 };
+        var nodes = !simplified
             // Preferred: the menu Windows itself produced for this kind of
             // object, so labels/order/icons are exactly what Explorer shows.
-            ? MenuPreviewComposer.ComposeNative(native, vm.MenuItems.ToList())
+            ? MenuPreviewComposer.ComposeNative(native!, vm.MenuItems.ToList())
             // Fallback when the shell cannot build one (locked-down machine,
             // unknown class): the hand-built catalog layout.
             : MenuPreviewComposer.Compose(
@@ -44,7 +45,7 @@ public partial class ContextMenuPreview : UserControl
 
         if (nodes.Count == 0) return;
 
-        var menu = PreviewMenuFactory.Create(nodes, vm);
+        var menu = PreviewMenuFactory.Create(nodes, vm, simplified);
         menu.PlacementTarget = PreviewSurface;
         menu.Placement = PlacementMode.MousePoint;
         menu.IsOpen = true;
