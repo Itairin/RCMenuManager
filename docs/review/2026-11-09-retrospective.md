@@ -443,3 +443,61 @@ Win11 25H2 仍支持 CLSID {86ca1aa0…} 覆盖（未公开行为，微软 Q&A �
 | `.exe` | 打开(O) 加粗置顶，以管理员身份运行、在记事本中编辑、使用小米互传发送、ToDesk、通过 Code 打开… 属性(R) 收尾 |
 
 测试：**133 通过 / 0 失败**（新增 4 条：桌面菜单来自视图、文件夹背景菜单来自视图、两个作用域都不得出现原始注册表键名）。
+
+---
+
+## 附录 F：第二轮审阅（0.7.4）
+
+附录 E 之后再做一遍通读，找到四处会实际影响结果的问题。
+
+### F1 图标列优先级被写反
+
+`PreviewMenuFactory.BuildNode` 的注释写着「shell 位图 > 勾选字形 > verb 自带图标」，代码却是：
+
+```csharp
+if (node.Icon is not null) mi.Icon = shellBitmap;          // 第一优先
+else if (node.IsCheckable && node.IsChecked) mi.Icon = ✓;   // 第二优先
+...
+if (node.Item?.Icon is not null) mi.Icon = verbIcon;        // 无条件覆盖，等于把前两者作废
+```
+
+原生菜单里每一行几乎都能 link 回一个可编辑 verb，所以第三方处理器（`Compress to ZIP`、ToDesk、NVIDIA）显示的是注册表里那个图标，而不是 Windows 画的那一个。改成 `else if`，让三级优先级真正成立。三张新测试分别锁住三条分支。
+
+### F2 读取失败被永久缓存
+
+旧代码 `_cache[key] = nodes;` 连 null 一起缓存，于是：
+
+- 冷启动时某个 shell 扩展卡住 → `RunSta` 10 秒超时 → 该作用域**整个会话**都退回简化目录；
+- 用户唯一的解法是重启程序，界面上没有任何提示。
+
+改成「失败不写缓存，只记时间戳」，30 秒冷却后自动重试。冷却期存在的意义是别让一个真正卡死的处理器每次右键都拖 10 秒。
+
+### F3 Shift 变体从未预热
+
+`LoadAsync` 只预热 `extendedVerbs: false`，而缓存键是 `ScopeId|norm` / `ScopeId|ext` 两条。勾上「显示 Shift 项」后第一次右键要走完整的冷读（约 2 秒，最坏 10 秒），而且是**同步跑在 UI 线程上**。现在两个变体一起预热，代价挪到后台线程。
+
+顺带加了 per-key 单飞（`SemaphoreSlim`）：预热线程和右键线程抢同一个 key 时，后来者等结果而不是各读一遍。
+
+### F4 简化预览长得太像真的
+
+原生读取失败时会静默画一份「注册表 + 目录」拼出来的菜单，界面上照旧写着「菜单由 Windows 自己构建」。现在弹窗第一行是一条置灰说明：
+
+> 系统菜单读取失败，以下为简化预览（可能缺少第三方扩展项）
+
+### F5 还有一个陈旧缓存的竞态
+
+`LoadAsync` 每次先 `Invalidate()` 再后台预热。但预热的读取可能**早于**一次注册表写入开始，却**晚于**它的 `Invalidate` 结束，于是把写入前的 HMENU 塞回缓存 —— invalidate 等于白做。加了一个 generation 计数：读取开始时取号，写缓存时对不上就丢弃。同时 `Invalidate` 顺带清掉失败冷却，语义统一为「现在就重新读」。
+
+### F6 预设里的绝对路径
+
+`在 Git Bash 中打开` 写死了 `C:/Program Files\Git\git-bash.exe`。预设是编进 exe 随包分发的，到了别的机器（Git 装在 D 盘、或 Program Files 被改过名）就失效。改成 `%ProgramFiles%\Git\git-bash.exe`，由 shell 展开环境变量。新增测试：内置预设的命令里不得出现盘符绝对路径。
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| 测试 | **141 通过 / 0 失败**（新增 8：图标优先级 3、简化提示 2、缓存失效 2、预设路径 1） |
+| 编译 | 0 警告 / 0 错误 |
+| 图标回归 | `docs/review/preview/exe-native.png` — 第三方项恢复为 Windows 画的图标 |
+| 提示样式 | `docs/review/preview/simplified-fallback.png` |
+| 单文件 | `publish/portable/RCMenuManager.exe`，从空目录启动 1.4 秒出窗口，`crash.log` 无新增 |
