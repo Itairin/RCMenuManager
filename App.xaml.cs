@@ -39,16 +39,27 @@ public partial class App : Application
             sp.GetRequiredService<IRegistrySnapshotTool>()));
         services.AddSingleton<IOperationLog, OperationLogService>();
         services.AddSingleton<WinVersionService>();
-        services.AddSingleton<IWin11MenuService, Win11MenuService>();
+        services.AddSingleton<IWin11MenuService>(sp => new Win11MenuService(
+            sp.GetRequiredService<RegistryWriteService>()));
+        services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton(sp => new MenuItemOriginService(
+            sp.GetRequiredService<IOperationLog>(),
+            sp.GetRequiredService<IPresetService>()));
+        services.AddSingleton<PendingActionStore>();
         services.AddSingleton<IFileTypeService, FileTypeService>();
-        services.AddSingleton<IPresetService, PresetService>();
+        services.AddSingleton<IPresetService>(sp => new PresetService(
+            sp.GetRequiredService<IRegistryWriter>(),
+            sp.GetRequiredService<RegistryWriteService>(),
+            sp.GetRequiredService<RegistryService>()));
         services.AddSingleton<IShellContextMenuReader>(ShellContextMenuReader.Instance);
         services.AddSingleton<RegistryWriteService>(sp =>
             new RegistryWriteService(
                 sp.GetRequiredService<IRegistryWriter>(),
                 sp.GetRequiredService<IBackupService>(),
                 sp.GetRequiredService<IOperationLog>(),
-                () => UacHelper.IsAdministrator()));
+                () => UacHelper.IsAdministrator(),
+                notifyShell: null,
+                importFile: sp.GetRequiredService<IBackupService>().Import));
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
 
@@ -73,6 +84,21 @@ public partial class App : Application
         var window = Services.GetRequiredService<MainWindow>();
         window.DataContext = vm;
         window.Show();
+
+        if (HasResumeFlag(e.Args))
+        {
+            // Deferred until the window exists so the replay's status / error banner is
+            // visible; the action itself is deleted from disk before it runs.
+            window.Dispatcher.BeginInvoke(new Action(() => _ = vm.RunPendingActionAsync()));
+        }
+    }
+
+    private static bool HasResumeFlag(string[] args)
+    {
+        foreach (var a in args)
+            if (string.Equals(a, "--resume", StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     private static string? ParseScopeArg(string[] args)
@@ -88,7 +114,15 @@ public partial class App : Application
     private static void ApplyPendingScope(MainViewModel vm)
     {
         if (string.IsNullOrEmpty(vm.PendingScopeId)) return;
-        var scope = MenuScope.FromScopeId(vm.PendingScopeId);
+        // The id does not carry a ProgID; resolve it again or the extension scope
+        // comes back with only half of its registry paths.
+        var probe = MenuScope.FromScopeId(vm.PendingScopeId);
+        var scope = probe;
+        if (probe.Type == ScopeType.FileExtension && !string.IsNullOrEmpty(probe.Extension))
+        {
+            var progId = vm.ResolveProgIdFor(probe.Extension!);
+            scope = MenuScope.FromScopeId(vm.PendingScopeId, progId);
+        }
         foreach (var s in vm.Scopes)
             if (s.Scope.Equals(scope))
             {

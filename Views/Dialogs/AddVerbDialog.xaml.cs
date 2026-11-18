@@ -1,4 +1,5 @@
 using System.Windows;
+using Microsoft.Win32;
 using RCMenuManager.Models;
 using RCMenuManager.Services;
 
@@ -10,12 +11,28 @@ public partial class AddVerbDialog : Window
 
     public EditableVerbDraft Result { get; private set; } = new();
 
+    /// <summary>
+    /// True when the caller can honour a machine-wide write; hides the scope choice
+    /// for dialogs that are always bound to an existing (already-chosen) hive.
+    /// </summary>
+    public bool AllowMachineScope
+    {
+        get => HiveScopePanel.Visibility == Visibility.Visible;
+        set => HiveScopePanel.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Hive the user chose. HKCU means "this account only".</summary>
+    public RegistryHive TargetHive => HiveMachineRadio.IsChecked == true
+        ? RegistryHive.ClassesRoot
+        : RegistryHive.CurrentUser;
+
     public AddVerbDialog(IconService iconService, string headline = "新增菜单项", bool allowParentOnly = true)
     {
         InitializeComponent();
         Title = headline;
         _iconService = iconService;
         ParentOnlyBox.Visibility = allowParentOnly ? Visibility.Visible : Visibility.Collapsed;
+        HiveScopePanel.Visibility = Visibility.Collapsed;
     }
 
     private void ParentOnlyBox_Changed(object sender, RoutedEventArgs e)

@@ -114,10 +114,14 @@ internal static class PreviewMenuFactory
         if (node.IsDefault)
             mi.FontWeight = FontWeights.SemiBold;
 
-        if (node.Item is not null && vm is not null)
+        // A row is clickable when the app can identify what it is: either an
+        // editable verb, or a registered shell-extension handler. Rows that are
+        // purely Explorer-internal stay inert (and greying them out would be a
+        // lie — Explorer shows them enabled).
+        if (vm is not null && node.CanSelect)
         {
-            mi.Command = vm.SelectPreviewItemCommand;
-            mi.CommandParameter = node.Item;
+            mi.Command = vm.SelectPreviewNodeCommand;
+            mi.CommandParameter = node;
         }
 
         foreach (var child in node.Children)

@@ -43,8 +43,14 @@ public partial class PresetDialogViewModel : ObservableObject
     [ObservableProperty] private int _skippedCount;
     [ObservableProperty] private int _errorCount;
     [ObservableProperty] private int _selectedCount;
+    [ObservableProperty] private int _alreadyPresentCount;
 
     public bool HasSelection => SelectedCount > 0;
+
+    /// <summary>e.g. "共 31 项 · 已存在 9 项（已自动勾选）".</summary>
+    public string SummaryText => AlreadyPresentCount > 0
+        ? $"共 {AllItems.Count} 项 · 已存在 {AlreadyPresentCount} 项（已自动勾选）"
+        : $"共 {AllItems.Count} 项预设";
 
     public PresetDialogViewModel(IPresetService service)
     {
@@ -64,12 +70,7 @@ public partial class PresetDialogViewModel : ObservableObject
             {
                 var group = new PresetGroup(scope, display);
                 foreach (var p in cat.Presets.Where(p => p.Scope == scope))
-                {
-                    var vm = new PresetItemViewModel(p) { IsApplied = _service.IsApplied(p) };
-                    vm.PropertyChanged += OnItemPropertyChanged;
-                    group.Items.Add(vm);
-                    AllItems.Add(vm);
-                }
+                    AddItem(group, p);
                 Groups.Add(group);
             }
             var extItems = cat.Presets.Where(p => p.Scope.StartsWith("FileExt:", StringComparison.OrdinalIgnoreCase)).ToList();
@@ -77,21 +78,42 @@ public partial class PresetDialogViewModel : ObservableObject
             {
                 var group = new PresetGroup("FileExt", "文件类型扩展");
                 foreach (var p in extItems)
-                {
-                    var vm = new PresetItemViewModel(p) { IsApplied = _service.IsApplied(p) };
-                    vm.PropertyChanged += OnItemPropertyChanged;
-                    group.Items.Add(vm);
-                    AllItems.Add(vm);
-                }
+                    AddItem(group, p);
                 Groups.Add(group);
             }
+            AlreadyPresentCount = AllItems.Count(i => i.IsApplied);
             UpdateCounters();
-            StatusText = $"共 {AllItems.Count} 项预设";
+            StatusText = SummaryText;
+            OnPropertyChanged(nameof(SummaryText));
         }
         catch (Exception ex)
         {
             StatusText = "加载预设失败: " + ex.Message;
         }
+    }
+
+    /// <summary>
+    /// Builds one row and mirrors the machine's current state onto it.
+    /// <para>
+    /// A preset that is already present is checked *and* marked applied. That is
+    /// the whole point of the recommendation panel: it has to show what is
+    /// actually enabled right now. Leaving existing items unchecked made the list
+    /// disagree with the menu the user sees in Explorer, and pressing
+    /// 「应用选中」 then did nothing for them while looking like it should have.
+    /// </para>
+    /// </summary>
+    private void AddItem(PresetGroup group, PresetItem preset)
+    {
+        var exists = _service.IsApplied(preset);
+        var vm = new PresetItemViewModel(preset)
+        {
+            IsApplied = exists,
+            IsSelected = exists,
+            State = exists ? PresetApplyState.Applied : PresetApplyState.Pending,
+        };
+        vm.PropertyChanged += OnItemPropertyChanged;
+        group.Items.Add(vm);
+        AllItems.Add(vm);
     }
 
     [RelayCommand]
@@ -125,7 +147,13 @@ public partial class PresetDialogViewModel : ObservableObject
                     ErrorCount++;
                 }
             }
-            StatusText = $"应用 {AppliedCount} · 跳过 {SkippedCount} · 失败 {ErrorCount}";
+            // The counters above describe this run; the presence counters describe the
+            // machine, so both have to be refreshed or the summary keeps claiming the
+            // pre-apply state.
+            AlreadyPresentCount = AllItems.Count(i => i.IsApplied);
+            StatusText = $"应用 {AppliedCount} · 跳过 {SkippedCount} · 失败 {ErrorCount}"
+                         + $" · 已存在 {AlreadyPresentCount}";
+            OnPropertyChanged(nameof(SummaryText));
         }
         finally
         {

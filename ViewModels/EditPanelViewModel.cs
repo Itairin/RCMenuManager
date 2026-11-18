@@ -57,5 +57,8 @@ public partial class EditPanelViewModel : ObservableObject
         IsExtended = DraftExtended,
         Position = DraftPosition ?? "Default",
         IsParentOnly = item.Model.IsParentOnly,
+        HasMuiVerb = !string.IsNullOrEmpty(item.Model.MuiVerb),
+        HasInferredName = item.IsNameInferred,
+        OriginalDisplayName = item.DisplayName,
     };
 }

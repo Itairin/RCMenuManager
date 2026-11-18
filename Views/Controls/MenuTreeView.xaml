@@ -1,52 +1,24 @@
-﻿<UserControl x:Class="RCMenuManager.Views.Controls.MenuTreeView"
+<UserControl x:Class="RCMenuManager.Views.Controls.MenuTreeView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:RCMenuManager.ViewModels"
-             xmlns:conv="clr-namespace:RCMenuManager.Converters">
+             xmlns:conv="clr-namespace:RCMenuManager.Converters"
+             Focusable="False"
+             PreviewKeyDown="OnPreviewKeyDown">
     <UserControl.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
         <conv:StringNotEmptyToVisibilityConverter x:Key="StringToVis" />
+        <conv:StringEmptyToVisibilityConverter x:Key="StringEmptyToVis" />
 
-        <HierarchicalDataTemplate DataType="{x:Type vm:MenuItemViewModel}" ItemsSource="{Binding Children}">
-            <Grid Margin="0,1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="20" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Image Grid.Column="0" Width="16" Height="16"
-                       VerticalAlignment="Center"
-                       Source="{Binding Icon}"
-                       SnapsToDevicePixels="True" />
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
-                    <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center"
-                               Foreground="{StaticResource TextBrush}" />
-                    <TextBlock Text="{Binding VerbName}" Margin="8,0,0,0"
-                               Foreground="{StaticResource TertiaryTextBrush}"
-                               FontSize="11" VerticalAlignment="Center" />
-                </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
-                    <Border Style="{StaticResource Badge}"
-                            Visibility="{Binding Flags, Converter={StaticResource StringToVis}}"
-                            Background="{StaticResource SubtleBackground}">
-                        <TextBlock Text="{Binding Flags}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
-                    </Border>
-                    <Border Style="{StaticResource Badge}"
-                            Visibility="{Binding OriginText, Converter={StaticResource StringToVis}}"
-                            Background="{StaticResource InfoSubtleBrush}">
-                        <TextBlock Text="{Binding OriginText}" Foreground="{StaticResource InfoBrush}" FontSize="11" />
-                    </Border>
-                </StackPanel>
-            </Grid>
-        </HierarchicalDataTemplate>
     </UserControl.Resources>
 
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <Border Grid.Row="0" Style="{StaticResource SectionDivider}" Padding="14,12">
+        <Border Grid.Row="0" Style="{StaticResource SectionDivider}" Padding="14,12,14,8">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -56,7 +28,7 @@
                     <TextBlock Text="菜单项" Style="{StaticResource TitleText}" />
                     <Border Style="{StaticResource Badge}" Background="{StaticResource SubtleBackground}" Margin="10,0,0,0">
                         <TextBlock Foreground="{StaticResource MutedTextBrush}" FontSize="11"
-                                   Text="{Binding MenuItems.Count, StringFormat=共 {0} 项}" />
+                                   Text="{Binding ListSummary}" />
                     </Border>
                     <StackPanel Orientation="Horizontal" Margin="10,0,0,0"
                                 Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
@@ -79,9 +51,39 @@
                 </Button>
             </Grid>
         </Border>
-        <TreeView Grid.Row="1"
+
+        <!-- Search: a scope can hold 40+ verbs once a few tools are installed, and
+             scrolling is the only way to find one without this box. -->
+        <Border Grid.Row="1" Padding="14,0,14,10">
+            <Grid Height="30">
+                <TextBox x:Name="SearchBox"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         VerticalContentAlignment="Center"
+                         Padding="28,0,26,0"
+                         ToolTip="按显示名、Verb、命令或注册表路径筛选（Ctrl+F）" />
+                <Path Width="12" Height="12" Margin="10,0,0,0"
+                      HorizontalAlignment="Left" VerticalAlignment="Center"
+                      IsHitTestVisible="False" Fill="Transparent"
+                      Stroke="{StaticResource TertiaryTextBrush}" StrokeThickness="1.4"
+                      StrokeStartLineCap="Round" StrokeLineJoin="Round"
+                      Data="M10,10 L14,14 M2,6 A4,4 0 1 1 10,6 A4,4 0 1 1 2,6" />
+                <TextBlock Text="筛选菜单项（Ctrl+F）" Margin="30,0,0,0"
+                           VerticalAlignment="Center" IsHitTestVisible="False"
+                           Foreground="{StaticResource TertiaryTextBrush}" FontSize="12"
+                           Visibility="{Binding SearchText, Converter={StaticResource StringEmptyToVis}}" />
+                <Button Content="✕" Width="22" Height="22" Padding="0" FontSize="11"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                        Background="Transparent" BorderThickness="0"
+                        Foreground="{StaticResource MutedTextBrush}"
+                        Command="{Binding ClearSearchCommand}"
+                        ToolTip="清除筛选"
+                        Visibility="{Binding SearchText, Converter={StaticResource StringToVis}}" />
+            </Grid>
+        </Border>
+
+        <TreeView Grid.Row="2"
                   x:Name="Tree"
-                  ItemsSource="{Binding MenuItems}"
+                  ItemsSource="{Binding FilteredItems}"
                   BorderThickness="0"
                   Padding="10,8,6,8"
                   Background="Transparent"
@@ -89,8 +91,61 @@
             <TreeView.ItemContainerStyle>
                 <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
                     <Setter Property="IsExpanded" Value="True" />
+                    <!-- Two-way so the view model can restore the selection after the
+                         list is rebuilt, and so a stale selection cannot linger. -->
+                    <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
                 </Style>
             </TreeView.ItemContainerStyle>
+            <TreeView.ItemTemplate>
+                <HierarchicalDataTemplate DataType="{x:Type vm:MenuItemViewModel}" ItemsSource="{Binding Children}">
+                    <Grid Margin="0,1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="20" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Image Grid.Column="0" Width="16" Height="16"
+                               VerticalAlignment="Center" Source="{Binding Icon}"
+                               SnapsToDevicePixels="True" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
+                            <TextBlock Text="{Binding MenuText}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource TextBrush}" />
+                            <TextBlock Text="{Binding VerbName}" Margin="8,0,0,0"
+                                       Foreground="{StaticResource TertiaryTextBrush}"
+                                       FontSize="11" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
+                            <!-- Where the item came from: this is the answer to
+                                 "did I add this, or did some app?" -->
+                            <Border Style="{StaticResource Badge}"
+                                    Visibility="{Binding HasSourceBadge, Converter={StaticResource BoolToVis}}"
+                                    Background="{StaticResource InfoSubtleBrush}"
+                                    ToolTip="{Binding SourceDetail}">
+                                <TextBlock Text="{Binding SourceBadge}" Foreground="{StaticResource InfoBrush}" FontSize="11" />
+                            </Border>
+                            <Border Style="{StaticResource Badge}"
+                                    Visibility="{Binding IsNameInferred, Converter={StaticResource BoolToVis}}"
+                                    Background="{StaticResource WarnSubtleBrush}"
+                                    ToolTip="{Binding NameHint}">
+                                <TextBlock Text="名称推断" Foreground="{StaticResource WarnBrush}" FontSize="11" />
+                            </Border>
+                            <!-- Explorer will not draw this row; saying so keeps the list
+                                 from claiming a menu item that does not exist. -->
+                            <Border Style="{StaticResource Badge}"
+                                    Visibility="{Binding IsHiddenFromMenu, Converter={StaticResource BoolToVis}}"
+                                    Background="{StaticResource DangerSubtleBrush}"
+                                    ToolTip="{Binding VisibilityNote}">
+                                <TextBlock Text="菜单中隐藏" Foreground="{StaticResource DangerBrush}" FontSize="11" />
+                            </Border>
+                            <Border Style="{StaticResource Badge}"
+                                    Visibility="{Binding Flags, Converter={StaticResource StringToVis}}"
+                                    Background="{StaticResource SubtleBackground}">
+                                <TextBlock Text="{Binding Flags}" Foreground="{StaticResource MutedTextBrush}" FontSize="11" />
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </HierarchicalDataTemplate>
+            </TreeView.ItemTemplate>
         </TreeView>
     </Grid>
 </UserControl>

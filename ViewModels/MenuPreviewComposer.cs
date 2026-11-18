@@ -50,6 +50,22 @@ public sealed class PreviewNode
 
     public MenuItemViewModel? Item { get; init; }
 
+    /// <summary>
+    /// Set when the row comes from a <c>shellexContextMenuHandlers</c> entry.
+    /// These rows are not editable, but they are identifiable — which is what
+    /// makes them selectable and lets the details pane explain the origin.
+    /// </summary>
+    public ShellExtensionInfo? Extension { get; init; }
+
+    /// <summary>True when clicking the row can select something.</summary>
+    public bool CanSelect => Item is not null || Extension is not null;
+
+    /// <summary>
+    /// True when more than one verb renders with this label. The row still resolves to
+    /// the effective one, but the user is told the label is not unique.
+    /// </summary>
+    public bool IsAmbiguousMatch { get; init; }
+
     public IReadOnlyList<PreviewNode> Children { get; init; } = Array.Empty<PreviewNode>();
 
     public bool HasChildren => Children.Count > 0;
@@ -139,13 +155,70 @@ public static class MenuPreviewComposer
     /// </summary>
     public static IReadOnlyList<PreviewNode> ComposeNative(
         IReadOnlyList<ShellMenuNode> native,
-        IReadOnlyList<MenuItemViewModel> items)
+        IReadOnlyList<MenuItemViewModel> items,
+        IReadOnlyList<ShellExtensionInfo>? shellExtensions = null)
     {
         var lookup = BuildTextLookup(items);
-        return Normalize(native.Select(n => FromNative(n, lookup)).ToList());
+        var extensions = BuildExtensionLookup(shellExtensions);
+        return Normalize(native.Select(n => FromNative(n, lookup, extensions)).ToList());
     }
 
-    private static PreviewNode FromNative(ShellMenuNode node, IReadOnlyDictionary<string, MenuItemViewModel> lookup)
+    /// <summary>
+    /// Maps a shell-extension handler to the names Explorer might print for it.
+    /// "共享" / "在记事本中打开" come from <c>shellex\ContextMenuHandlers</c>
+    /// (Sharing, Open With), so they have no registry verb and used to be
+    /// impossible to select: the row rendered but clicking did nothing.
+    /// </summary>
+    private static IReadOnlyDictionary<string, ShellExtensionInfo> BuildExtensionLookup(
+        IReadOnlyList<ShellExtensionInfo>? shellExtensions)
+    {
+        var map = new Dictionary<string, ShellExtensionInfo>(StringComparer.OrdinalIgnoreCase);
+        if (shellExtensions is null) return map;
+        foreach (var ext in shellExtensions)
+        {
+            void Add(string? key)
+            {
+                if (string.IsNullOrWhiteSpace(key)) return;
+                var normalized = NormalizeText(key);
+                if (normalized.Length > 0 && !map.ContainsKey(normalized)) map[normalized] = ext;
+            }
+
+            // The registered name, the raw key name, and the CLSID's own name are all
+            // candidates for the text Explorer ends up drawing.
+            Add(ext.DisplayName);
+            Add(ext.SourceKey);
+            Add(ext.FriendlyName);
+            foreach (var alias in ShellExtensionAliases(ext)) Add(alias);
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// Well-known handler names Explorer localizes, so the CLSID-based registry name
+    /// ("Shell extensions for sharing") still matches the menu row ("共享").
+    /// </summary>
+    private static IEnumerable<string> ShellExtensionAliases(ShellExtensionInfo ext)
+    {
+        var clsid = (ext.Clsid ?? string.Empty).Trim().ToUpperInvariant();
+        return clsid switch
+        {
+            // Sharing / ModernSharing
+            "{F81E9010-6EA4-11CE-A7FF-00AA003CA9F6}" => new[] { "共享", "Share", "Share with" },
+            "{E2BF9676-5F8F-435C-97EB-11607A5BEDF7}" => new[] { "共享", "Share" },
+            // Open With
+            "{09799AFB-AD67-11D1-ABCD-00C04FC30936}" => new[] { "打开方式", "Open with", "在记事本中打开", "Notepad" },
+            // Copy as path
+            "{F3D06E7C-1E45-4A26-847E-F9FCDEE59BE0}" => new[] { "复制为路径", "Copy as path" },
+            // SendTo
+            "{7BA4C740-9E81-11CF-99D3-00AA004AE837}" => new[] { "发送到", "Send to" },
+            _ => Array.Empty<string>(),
+        };
+    }
+
+    private static PreviewNode FromNative(
+        ShellMenuNode node,
+        IReadOnlyDictionary<string, List<MenuItemViewModel>> lookup,
+        IReadOnlyDictionary<string, ShellExtensionInfo> extensions)
     {
         if (node.IsSeparator) return PreviewNode.Separator();
 
@@ -158,31 +231,56 @@ public static class MenuPreviewComposer
             label = label[..tab].TrimEnd();
         }
 
-        lookup.TryGetValue(NormalizeText(label), out var match);
+        var key = NormalizeText(label);
+        lookup.TryGetValue(key, out var candidates);
+        var match = candidates is null ? null : PickMatch(candidates);
+        var ambiguous = candidates is { Count: > 1 };
+        extensions.TryGetValue(key, out var extension);
+
+        // A row is selectable when the app knows *something* about where it comes
+        // from: either an editable verb, or a registered shell-extension handler.
+        // Rows that are genuinely Explorer-internal (刷新, 查看, 属性 ...) still have
+        // no owner and stay reference-only, which is correct — there is nothing to
+        // edit, and pretending otherwise would break the "what you see is what is
+        // registered" promise.
         return new PreviewNode
         {
             Header = label,
             Shortcut = string.IsNullOrEmpty(shortcut) ? null : shortcut,
             Item = match,
-            IsBuiltIn = match is null,
+            Extension = extension,
+            IsBuiltIn = match is null && extension is null,
             IsEnabled = node.IsEnabled,
             IsDefault = node.IsDefault,
             IsChecked = node.IsChecked,
             Icon = node.Icon,
             // Shift-only verbs only show up in the extended menu, which the
-            // shell already filtered; the badge keeps that visible.
-            Badge = match is { IsExtended: true } ? "Shift" : null,
-            Children = node.Children.Select(c => FromNative(c, lookup)).ToArray(),
+            // shell already filtered; the badge keeps that visible. A duplicate label
+            // is flagged so the user knows the row maps to one of several verbs.
+            Badge = match is { IsExtended: true } ? "Shift" : ambiguous ? "重名" : null,
+            IsAmbiguousMatch = ambiguous,
+            Children = node.Children.Select(c => FromNative(c, lookup, extensions)).ToArray(),
         };
     }
 
-    private static IReadOnlyDictionary<string, MenuItemViewModel> BuildTextLookup(IReadOnlyList<MenuItemViewModel> items)
+    /// <summary>
+    /// Display text to every verb that renders with it. A list is kept because two
+    /// different verbs can share a label (a per-user override next to the machine one,
+    /// or two apps using the same friendly name); picking the first match blindly made
+    /// the preview select the wrong key, and the following edit then landed on it.
+    /// </summary>
+    private static IReadOnlyDictionary<string, List<MenuItemViewModel>> BuildTextLookup(
+        IReadOnlyList<MenuItemViewModel> items)
     {
-        var map = new Dictionary<string, MenuItemViewModel>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<string, List<MenuItemViewModel>>(StringComparer.OrdinalIgnoreCase);
         void Add(MenuItemViewModel item)
         {
             var key = NormalizeText(item.DisplayName);
-            if (key.Length > 0 && !map.ContainsKey(key)) map[key] = item;
+            if (key.Length > 0)
+            {
+                if (!map.TryGetValue(key, out var list)) map[key] = list = new List<MenuItemViewModel>(1);
+                list.Add(item);
+            }
             foreach (var child in item.Children) Add(child);
         }
         foreach (var item in items) Add(item);
@@ -190,47 +288,36 @@ public static class MenuPreviewComposer
     }
 
     /// <summary>
+    /// Chooses which verb a rendered row refers to. Per-user wins over machine-wide
+    /// because that is the copy Windows itself prefers; the rest keep list order.
+    /// </summary>
+    private static MenuItemViewModel? PickMatch(List<MenuItemViewModel> candidates)
+    {
+        if (candidates.Count == 0) return null;
+        if (candidates.Count == 1) return candidates[0];
+        return candidates.FirstOrDefault(c => c.WriteHive == Microsoft.Win32.RegistryHive.CurrentUser)
+               ?? candidates[0];
+    }
+
+    /// <summary>
     /// "打开(&amp;O)" -> "打开", "&amp;Open WezTerm here" -> "Open WezTerm here":
     /// menu text carries the access-key marker and the accelerator suffix, the
     /// parsed display name does not.
     /// </summary>
-    private static string NormalizeText(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return string.Empty;
-        var sb = new StringBuilder(text.Length);
-        for (var i = 0; i < text.Length; i++)
-        {
-            var c = text[i];
-            if (c == '&')
-            {
-                // "&&" is a literal ampersand; a lone "&" marks the access key.
-                if (i + 1 < text.Length && text[i + 1] == '&') { sb.Append('&'); i++; }
-                continue;
-            }
-            sb.Append(c);
-        }
-        var result = sb.ToString().Trim();
-        var open = result.LastIndexOf('(');
-        if (open > 0 && result.EndsWith(")", StringComparison.Ordinal))
-        {
-            // "(O)" / "(&O)" -> drop the accelerator suffix, keep real
-            // parentheses such as "压缩(zipped)文件夹".
-            var suffix = result.Substring(open + 1, result.Length - open - 2).TrimStart('&');
-            if (suffix.Length is 1 or 2 && suffix.All(char.IsLetterOrDigit))
-                result = result.Substring(0, open).Trim();
-        }
-        return result;
-    }
+    private static string NormalizeText(string text) => Helpers.MenuTextHelper.NormalizeForMatch(text);
 
     public static PreviewNode FromItem(MenuItemViewModel item)
     {
+        // A verb Explorer will not draw must not look clickable in the fallback
+        // preview either: the details pane says "菜单中隐藏", and the popup showing
+        // it as a normal enabled row contradicted that.
         return new PreviewNode
         {
             Header = item.DisplayName,
             Item = item,
             IsBuiltIn = false,
-            IsEnabled = true,
-            Badge = item.IsExtended ? "Shift" : null,
+            IsEnabled = !item.IsHiddenFromMenu,
+            Badge = item.IsExtended ? "Shift" : item.IsHiddenFromMenu ? "隐藏" : null,
             Children = item.Children.Select(FromItem).ToArray(),
         };
     }
@@ -257,7 +344,11 @@ public static class MenuPreviewComposer
         var header = !string.IsNullOrWhiteSpace(ext.DisplayName) && ext.DisplayName != ext.SourceKey
             ? ext.DisplayName
             : ext.SourceKey;
-        return new PreviewNode { Header = header, IsBuiltIn = true };
+        // Carrying the handler makes the row selectable here too. The native path can
+        // resolve a handler from the row text; the fallback path has no shell text to
+        // match, so without this the same entry was clickable in one preview mode and
+        // dead in the other.
+        return new PreviewNode { Header = header, Extension = ext, IsBuiltIn = false };
     }
 
     /// <summary>Drops leading / trailing separators and collapses runs of them.</summary>

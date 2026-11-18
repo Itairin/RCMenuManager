@@ -28,12 +28,17 @@ public partial class ContextMenuPreview : UserControl
     {
         if (DataContext is not MainViewModel vm || vm.SelectedScope is null) return;
 
-        var native = vm.ShellMenu.TryRead(vm.SelectedScope.Scope, vm.ShowExtended);
+        // Same target as the list: otherwise the popup describes a scratch sample while
+        // the list describes the dropped file, and the two disagree.
+        var native = vm.ShellMenu.TryRead(vm.SelectedScope.Scope, vm.ShowExtended, vm.DropTarget?.Path);
         var simplified = native is not { Count: > 0 };
         var nodes = !simplified
             // Preferred: the menu Windows itself produced for this kind of
             // object, so labels/order/icons are exactly what Explorer shows.
-            ? MenuPreviewComposer.ComposeNative(native!, vm.MenuItems.ToList())
+            // The handlers are passed in so rows that come from a shellex DLL
+            // ("共享" / "在记事本中打开") can be matched and selected instead of
+            // rendering as dead reference entries.
+            ? MenuPreviewComposer.ComposeNative(native!, vm.MenuItems.ToList(), vm.ShellExtensions)
             // Fallback when the shell cannot build one (locked-down machine,
             // unknown class): the hand-built catalog layout.
             : MenuPreviewComposer.Compose(

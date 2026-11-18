@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RCMenuManager.Models;
@@ -20,9 +21,42 @@ public partial class MenuItemViewModel : ObservableObject
 
     public ContextMenuItem Model { get; }
 
+    /// <summary>
+    /// Where this item came from. Set by <see cref="Services.MenuItemOriginService"/>
+    /// right after parsing so the tree, the badge column and the details pane all
+    /// read the same answer instead of each re-deriving it.
+    /// </summary>
+    public MenuItemOrigin Origin { get; internal set; } = MenuItemOrigin.Unknown;
+
+    /// <summary>Short badge text; empty when nothing was recognised.</summary>
+    public string SourceBadge => Origin.Badge;
+
+    /// <summary>Longer explanation for the details pane.</summary>
+    public string SourceDetail => Origin.Detail;
+
+    public bool HasSourceBadge => Origin.Source != MenuItemSource.Unknown;
+
+    /// <summary>
+    /// True when the key stores no label at all and the name had to be inferred
+    /// (CLSID handler name, standard verb table, or the raw key). Showing such a
+    /// name without saying so is what made the desktop scope look wrong.
+    /// </summary>
+    public bool IsNameInferred => Model.HasNoStoredLabel;
+
+    public string NameHint => IsNameInferred
+        ? "该注册表键没有存储显示名，此处名称是推断出来的（来自命令处理器或系统 verb 表）"
+        : string.Empty;
+
     public ObservableCollection<MenuItemViewModel> Children { get; }
 
     public string DisplayName => Model.DisplayName;
+
+    /// <summary>
+    /// <see cref="DisplayName"/> with the shell's access-key marker removed, for the
+    /// places that render plain text (list rows, details title). The preview menu
+    /// keeps the marker so it can underline the letter like Explorer does.
+    /// </summary>
+    public string MenuText => Helpers.MenuTextHelper.StripAccessKeys(Model.DisplayName);
     public string VerbName => Model.VerbName;
     public string Command => Model.Command;
     public string ExpandedCommand => Model.ExpandedCommand;
@@ -43,6 +77,25 @@ public partial class MenuItemViewModel : ObservableObject
         && !string.Equals(ExpandedCommand, Command, StringComparison.Ordinal);
 
     public string RegistryPath => Model.RegistryPath;
+
+    /// <summary>True when the row comes from the shell's own menu and cannot be edited.</summary>
+    public bool IsReadOnly => Model.IsShellProvided;
+
+    /// <summary>Inverse of <see cref="IsReadOnly"/>, for binding button state.</summary>
+    public bool CanEdit => !IsReadOnly;
+
+    /// <summary>Why it is read-only (shown in the details pane).</summary>
+    public string? ShellSourceDetail => Model.ShellSourceDetail;
+
+    /// <summary>
+    /// True for a registry verb the shell did not draw for this scope. The row is
+    /// editable, but the list says so instead of pretending it is on the menu.
+    /// </summary>
+    public bool NotInShellMenu => Model.NotInShellMenu;
+
+    public string MenuPresenceNote => NotInShellMenu
+        ? "该注册表项当前没有被资源管理器显示（可能被 AppliesTo 条件、使用频率或系统版本抑制）。编辑仍然有效，但菜单里可能看不到。"
+        : string.Empty;
     public string? MuiVerb => Model.MuiVerb;
     public string? Position => Model.Position;
     public CascadingKind Cascading => Model.Cascading;
@@ -70,6 +123,32 @@ public partial class MenuItemViewModel : ObservableObject
     /// or the legacy <c>LegacyDisable</c> flag. Used by the Enable/Disable
     /// toggle so it covers both mechanisms.</summary>
     public bool IsDisabled => IsProgrammaticOnly || IsLegacyDisabled;
+
+    /// <summary>
+    /// True when Explorer will not draw this row at all. The list still shows it —
+    /// it is a real registry entry the user may want to revive — but presenting it
+    /// like an ordinary item made the panel disagree with the menu: on this machine
+    /// the 文件与文件夹 scope listed two entries that never appear in Explorer.
+    /// </summary>
+    public bool IsHiddenFromMenu => IsDisabled;
+
+    /// <summary>
+    /// True when visibility is decided at runtime by Explorer (usage frequency),
+    /// which the registry cannot resolve. The row may or may not be drawn.
+    /// </summary>
+    public bool HasVelocityCondition => Model.HasVelocityCondition;
+
+    public string VisibilityNote
+    {
+        get
+        {
+            if (IsDisabled)
+                return "菜单中隐藏：注册表标记了 ProgrammaticAccessOnly / LegacyDisable，资源管理器不会显示它。点「启停」可恢复显示。";
+            if (HasVelocityCondition)
+                return "显示与否由资源管理器按使用频率决定（Hide/ShowBasedOnVelocityId），不同电脑上可能不同。";
+            return string.Empty;
+        }
+    }
     public bool IsSystemVerb => Model.IsSystemVerb;
     public bool HasChildren => Children.Count > 0;
     public bool IsTop => string.Equals(Model.Position, "Top", StringComparison.OrdinalIgnoreCase);
@@ -129,9 +208,14 @@ public partial class MenuItemViewModel : ObservableObject
         get
         {
             var parts = new List<string>(4);
+            if (IsReadOnly) parts.Add("只读");
+            if (NotInShellMenu) parts.Add("菜单中未显示");
             if (IsExtended) parts.Add("Shift");
-            if (IsProgrammaticOnly) parts.Add("仅程序");
-            if (IsLegacyDisabled) parts.Add("禁用");
+            // The registry flag names stay out of the badge: both flags mean the same
+            // thing to a user ("Explorer will not draw this"), and the details pane
+            // spells out which one it is.
+            if (IsHiddenFromMenu) parts.Add("菜单中隐藏");
+            else if (HasVelocityCondition) parts.Add("按频率显示");
             if (IsSystemVerb) parts.Add("系统");
             if (HasDelegateExecute) parts.Add("COM 代理");
             if (HasLuaShield) parts.Add("UAC");
@@ -142,15 +226,26 @@ public partial class MenuItemViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Two-way bound to <c>TreeViewItem.IsSelected</c>. The list is rebuilt after
+    /// every write (which destroys the containers), so the flag is kept on the item
+    /// itself: that is what lets the view model restore the user's selection instead
+    /// of leaving the details panel on an item that is no longer in the list.
+    /// </summary>
     [ObservableProperty]
-    private BitmapSource? _icon;
+    private bool _isSelected;
 
-    public MenuItemViewModel(ContextMenuItem model, IconService iconService)
+    [ObservableProperty]
+    private ImageSource? _icon;
+
+    public MenuItemViewModel(ContextMenuItem model, IconService iconService, ImageSource? shellIcon = null)
     {
         Model = model;
         _iconService = iconService;
         Children = new ObservableCollection<MenuItemViewModel>(
             model.Children.Select(c => new MenuItemViewModel(c, iconService)));
-        Icon = _iconService.Resolve(model.IconExpression);
+        // Shell-provided rows carry the bitmap Explorer drew; registry verbs fall back
+        // to their Icon value.
+        Icon = shellIcon ?? _iconService.Resolve(model.IconExpression);
     }
 }

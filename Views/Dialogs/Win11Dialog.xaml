@@ -1,4 +1,4 @@
-﻿<Window x:Class="RCMenuManager.Views.Dialogs.Win11Dialog"
+<Window x:Class="RCMenuManager.Views.Dialogs.Win11Dialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Win11 新菜单" Width="600" Height="480"
@@ -22,7 +22,7 @@
                           Data="M8,1 A7,7 0 1 0 8,15 A7,7 0 1 0 8,1 M8,5 V9 M8,11 V11.1" />
                     <TextBlock TextWrapping="Wrap" MaxWidth="500"
                                Foreground="{StaticResource TextBrush}"
-                               Text="开启或关闭 Win11 新版右键菜单（显示更多选项折叠菜单），并管理被隐藏的 Block 列表。切换后需重启资源管理器才生效。" />
+                               Text="开启或关闭 Win11 新版右键菜单（显示更多选项折叠菜单），并管理被隐藏的 Block 列表。切换后需重启资源管理器才生效。该开关依赖未公开的注册表行为，系统更新后可能失效；每次切换前都会自动备份，可在「备份」里还原。" />
                 </StackPanel>
             </Border>
 

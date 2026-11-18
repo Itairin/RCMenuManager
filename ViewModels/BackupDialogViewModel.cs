@@ -4,10 +4,12 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RCMenuManager.Models;
 using RCMenuManager.Services;
+using RCMenuManager.Views.Dialogs;
 
 namespace RCMenuManager.ViewModels;
 
@@ -66,6 +68,16 @@ public partial class BackupDialogViewModel : ObservableObject
     private void DeleteBackup(BackupRecord? rec)
     {
         if (rec is null) return;
+
+        // This file is often the only way back from a bad edit, so it gets the same
+        // confirmation as a registry write instead of being deleted on a single click.
+        var owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w is BackupDialog)
+                    ?? Application.Current?.MainWindow;
+        if (!ConfirmDialog.Ask(owner, "删除备份",
+                $"将永久删除备份文件 {System.IO.Path.GetFileName(rec.FilePath)}。删除后无法再用它还原本次操作。",
+                confirmText: "删除", cancelText: "取消", dangerous: true))
+            return;
+
         _backup.Delete(rec.FilePath);
         Refresh();
     }
