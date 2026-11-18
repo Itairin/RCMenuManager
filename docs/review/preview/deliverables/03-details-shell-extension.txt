@@ -1,0 +1,12 @@
+image: 03-details-shell-extension.png
+size: 460x520
+nonWhite: 15.5%
+--- visible text ---
+  详情
+  SlideshowContextMenu
+  外壳扩展（shellex）
+  该菜单项由第三方或系统的 shell 扩展 DLL 动态提供，没有独立的注册表 verb，因此不能在本工具里编辑或删除。要移除它，请卸载或重新配置对应的应用。
+  CLSID
+  DLL 路径
+  处理器注册名
+  注册位置

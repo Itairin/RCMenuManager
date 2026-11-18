@@ -1,0 +1,6 @@
+scope=Folder
+items=0
+withSourceBadge=0
+nameInferred=0
+hiddenFromMenu=0
+shellExtensions=0

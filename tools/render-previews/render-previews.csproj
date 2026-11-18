@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Renders the real controls off-screen into docs/review/preview/deliverables.
+     Run it after a change so the result is reviewable as an image without opening
+     the app. See docs/review/2026-11-16-deliverables.md for the command.
+     It only reads the registry; it never writes. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>RCMenuManager.PreviewRender</AssemblyName>
+    <RootNamespace>RCMenuManager.PreviewRender</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RCMenuManager.csproj" />
+  </ItemGroup>
+
+</Project>

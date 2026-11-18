@@ -18,7 +18,7 @@ public class Win11MenuServiceTests : IDisposable
         var suffix = Guid.NewGuid().ToString("N");
         _toggleRoot = $@"Software\RCMenuManager.Tests\Win11Toggle\{suffix}";
         _blockRoot = $@"Software\RCMenuManager.Tests\Win11Block\{suffix}";
-        _svc = new Win11MenuService(_toggleRoot, _blockRoot);
+        _svc = new Win11MenuService(_toggleRoot, _blockRoot);   // no transactor: writes the scratch keys directly
         Cleanup();
     }
 

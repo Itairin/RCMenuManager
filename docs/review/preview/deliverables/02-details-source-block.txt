@@ -1,0 +1,16 @@
+image: 02-details-source-block.png
+size: 460x620
+nonWhite: 22.8%
+--- visible text ---
+  详情
+  编辑
+  启停
+  子项
+  删除
+  查看
+  来源
+  扩展提供
+  该行由系统菜单直接生成（可能是 shell 扩展 DLL、MSIX 包应用或 Explorer 自身功能），注册表里没有对应的可编辑 verb。
+  命令
+  注册表路径
+  标记

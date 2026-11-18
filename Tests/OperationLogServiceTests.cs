@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using RCMenuManager.Services;
 using Xunit;
 
@@ -42,6 +43,28 @@ public class OperationLogServiceTests
         Assert.True(new FileInfo(path).Length < 400, "active log should have been trimmed by rotation");
         Assert.Contains(svc.ReadAll(), e => e.verb.StartsWith("verb-", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void ReadAll_includes_the_rotated_generation_oldest_first()
+    {
+        // A backup can easily outlive the log that recorded it. Before this, a lookup
+        // only searched the active file, so an older backup reported "no operation
+        // recorded" and could not be restored even though the .reg was still on disk.
+        var dir = Path.Combine(Path.GetTempPath(), "RCMenuManagerTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "op.log");
+
+        File.WriteAllText(path + ".1", Line("rotated") + Environment.NewLine);
+        File.WriteAllText(path, Line("current") + Environment.NewLine);
+
+        var verbs = new OperationLogService(path).ReadAll().Select(e => e.verb).ToList();
+
+        Assert.Equal(new[] { "rotated", "current" }, verbs);
+    }
+
+    private static string Line(string verb) =>
+        "{\"timestamp\":\"2026-06-17T10:00:00Z\",\"scopeId\":\"Folder\",\"verb\":\"" + verb +
+        "\",\"op\":\"Disable\",\"hive\":0,\"subKey\":\"a\",\"backupPath\":null,\"success\":true,\"error\":null}";
 
     private static OperationLogEntry Entry(string verb) => new(
         DateTime.UtcNow, "Folder", verb, "Disable", Microsoft.Win32.RegistryHive.CurrentUser,

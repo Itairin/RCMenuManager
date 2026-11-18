@@ -1,4 +1,4 @@
-﻿# RCMenuManager
+# RCMenuManager
 
 [![Build](https://github.com/your-name/RCMenuManager/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/RCMenuManager/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -18,7 +18,13 @@ RCMenuManager 是一个基于 WPF (.NET 10) 的桌面工具，让你可以查看
 - Win11 新菜单与经典菜单一键切换，附 Block 列表管理
 - 推荐预设（PRESETS）按分组勾选 + 批量应用
 - 写操作自动 `.reg` 备份，可一键还原；操作日志可追溯
-- 拖入文件 / 文件夹 / 驱动器自动识别对应作用域
+- 每个菜单项标注来源：本工具 / 应用注册 / 命令库 / 系统内置 / 系统或应用处理器 / COM 处理器
+- 预览里的「共享」「在记事本中打开」等外壳扩展项可选中查看（显示 CLSID 与 DLL），不再点了没反应
+- 推荐面板会把已存在的项自动勾上，并显示"共 N 项 · 已存在 M 项"
+- 列表即时筛选（Ctrl+F）：按显示名 / Verb / 命令 / 注册表路径匹配，父项在子孙命中时保持可见
+- 记住窗口位置与大小、分栏比例、上次作用域与「显示 Shift 项」
+- 拖入文件 / 文件夹 / 驱动器：按该对象读取真实右键菜单（不是样本文件），列表与资源管理器逐行一致，可直接修改
+- 拖入文件夹后可切换「看文件夹本身」/「看文件夹空白处」——这是两套不同的菜单
 - 系统 Verb 保护、UAC 提权感知、崩溃日志落地
 
 

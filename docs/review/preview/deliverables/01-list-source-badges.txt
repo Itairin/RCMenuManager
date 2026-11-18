@@ -1,0 +1,106 @@
+image: 01-list-source-badges.png
+size: 820x460
+nonWhite: 7.2%
+--- visible text ---
+  菜单项
+  共 19 项
+  新增
+  筛选菜单项（Ctrl+F）
+  查看
+  扩展提供
+  只读
+  大图标
+  扩展提供
+  只读
+  中等图标
+  扩展提供
+  只读
+  小图标
+  扩展提供
+  只读
+  自动排列图标
+  扩展提供
+  只读
+  将图标与网格对齐
+  扩展提供
+  只读
+  显示桌面图标
+  扩展提供
+  只读
+  排序方式
+  扩展提供
+  只读
+  名称
+  扩展提供
+  只读
+  大小
+  扩展提供
+  只读
+  项目类型
+  扩展提供
+  只读
+  修改日期
+  扩展提供
+  只读
+  刷新
+  扩展提供
+  只读
+  粘贴
+  扩展提供
+  只读
+  在终端中打开
+  扩展提供
+  只读
+  使用 Visual Studio 打开
+  扩展提供
+  只读
+  Open Git GUI here
+  扩展提供
+  只读
+  Open Git Bash here
+  扩展提供
+  只读
+  Open WezTerm here
+  扩展提供
+  只读
+  用 WorkBuddy 打开
+  扩展提供
+  只读
+  用 WorkBuddy AI 打开
+  扩展提供
+  只读
+  NVIDIA App
+  扩展提供
+  只读
+  NVIDIA 控制面板
+  扩展提供
+  只读
+  新建
+  扩展提供
+  只读
+  新建
+  扩展提供
+  只读
+  显示设置(D)
+  Display
+  系统内置
+  置底
+  个性化(R)
+  Personalize
+  系统内置
+  置底
+  编辑贴纸
+  EditStickers
+  系统处理器
+  名称推断
+  菜单中未显示
+  了解有关此图片的详细信息
+  .SpotlightLearnMore
+  系统处理器
+  名称推断
+  菜单中未显示 · 置底
+  切换到下一张图片
+  .SpotlightNextImage
+  系统处理器
+  名称推断
+  菜单中未显示 · 置底

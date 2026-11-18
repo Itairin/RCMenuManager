@@ -1,0 +1,21 @@
+image: 04-preview-popup.png
+size: 460x700
+nonWhite: 3.5%
+--- visible text ---
+  查看( V)
+  排序方式( O)
+  刷新( E)
+  粘贴( P)
+  在终端中打开( T)
+  使用 Visual Studio 打开( V)
+  Open Git  GUI here
+  Open Git Ba sh here
+   Open WezTerm here
+  用 WorkBuddy 打开
+  用 WorkBuddy AI 打开
+  NVIDIA App
+  NVIDIA 控制面板
+  新建( W)
+  重名
+  显示设置( D)
+  个性化( R)

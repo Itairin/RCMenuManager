@@ -278,7 +278,15 @@ public class MenuPreviewComposerTests
         var propIndex = Array.IndexOf(headers, "属性");
         Assert.True(extIndex > 0);
         Assert.True(extIndex < propIndex, "Shell 扩展应排在“属性”之前");
-        Assert.True(nodes.Single(n => n.Header == "7-Zip").IsBuiltIn);
+
+        // Was: IsBuiltIn == true, i.e. "reference-only". That assumption is what made
+        // 共享 / 在记事本中打开 impossible to select: an entry the app can identify
+        // (it has the CLSID and DLL) must be selectable, even though it cannot be
+        // edited. Explorer-internal rows without any registration stay IsBuiltIn.
+        var row = nodes.Single(n => n.Header == "7-Zip");
+        Assert.NotNull(row.Extension);
+        Assert.False(row.IsBuiltIn);
+        Assert.True(row.CanSelect);
     }
 
     [Fact]
