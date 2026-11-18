@@ -25,37 +25,43 @@ public class RegistryService
     /// </summary>
     public IReadOnlyList<RegistryQueryEntry> GetShellQueryPaths(MenuScope scope)
     {
-        var list = new List<RegistryQueryEntry>(4);
+        // Collect the class sub-keys first, then expand them user-hive-first.
+        // Interleaving per sub-key ("HKCU\Directory, HKLM\Directory, HKCU\Folder,
+        // HKLM\Folder") let an HKLM entry shadow a per-user one that Windows itself
+        // would prefer, so the list showed the machine copy, toggling it demanded
+        // elevation, and the menu did not visibly change because HKCU still won.
+        var subKeys = new List<string>(4);
+        var list = new List<RegistryQueryEntry>(8);
         switch (scope.Type)
         {
             case ScopeType.AllFiles:
-                Add(list, @"*\shell");
+                Add(@"*\shell");
                 // Explorer also shows items registered under AllFilesystemObjects
                 // when right-clicking a file (e.g. Work Folders, Offline Files).
-                Add(list, @"AllFilesystemObjects\shell");
+                Add(@"AllFilesystemObjects\shell");
                 break;
 
             case ScopeType.AllFilesystemObjects:
-                Add(list, @"AllFilesystemObjects\shell");
+                Add(@"AllFilesystemObjects\shell");
                 break;
 
             case ScopeType.Folder:
-                Add(list, @"Directory\shell");
+                Add(@"Directory\shell");
                 // Folder is the legacy class; Windows still uses it for the built-in
                 // "open/explore/opennew*" verbs that show on every folder.
-                Add(list, @"Folder\shell");
+                Add(@"Folder\shell");
                 break;
 
             case ScopeType.FolderBackground:
-                Add(list, @"Directory\Background\shell");
+                Add(@"Directory\Background\shell");
                 break;
 
             case ScopeType.Drive:
-                Add(list, @"Drive\shell");
+                Add(@"Drive\shell");
                 break;
 
             case ScopeType.Desktop:
-                Add(list, @"DesktopBackground\Shell");
+                Add(@"DesktopBackground\Shell");
                 break;
 
             case ScopeType.FileExtension:
@@ -63,17 +69,17 @@ public class RegistryService
                     break;
                 var ext = scope.Extension!;
                 // Per-extension shell on the extension key itself (rare but supported).
-                Add(list, $@"{ext}\shell");
+                Add($@"{ext}\shell");
                 // SystemFileAssociations\<ext>\shell hosts the "open"/"edit" entries
                 // Explorer uses for arbitrary files of a type.
-                Add(list, $@"SystemFileAssociations\{ext}\shell");
+                Add($@"SystemFileAssociations\{ext}\shell");
                 if (!string.IsNullOrEmpty(scope.ProgId))
                 {
                     var progId = scope.ProgId!;
-                    Add(list, $@"{progId}\shell");
+                    Add($@"{progId}\shell");
                     // SystemFileAssociations\<progId>\shell is where most built-in
                     // per-type handlers register.
-                    Add(list, $@"SystemFileAssociations\{progId}\shell");
+                    Add($@"SystemFileAssociations\{progId}\shell");
                 }
                 // Explorer keeps merging after the ProgID: the perceived type
                 // ("text", "image", "video"...) carries the entries every file of
@@ -82,17 +88,20 @@ public class RegistryService
                 // Without these the list would not contain verbs the preview shows.
                 var perceived = ResolvePerceivedType(ext, scope.ProgId);
                 if (!string.IsNullOrEmpty(perceived))
-                    Add(list, $@"SystemFileAssociations\{perceived}\shell");
-                Add(list, @"*\shell");
-                Add(list, @"AllFilesystemObjects\shell");
+                    Add($@"SystemFileAssociations\{perceived}\shell");
+                Add(@"*\shell");
+                Add(@"AllFilesystemObjects\shell");
                 break;
         }
 
-        static void Add(List<RegistryQueryEntry> target, string subKeyUnderClasses)
-        {
-            target.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\" + subKeyUnderClasses, RegistryHiveOrigin.CurrentUser));
-            target.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\" + subKeyUnderClasses, RegistryHiveOrigin.LocalMachine));
-        }
+        void Add(string subKeyUnderClasses) => subKeys.Add(subKeyUnderClasses);
+
+        // Order matters for the merge: every per-user path must be consulted before
+        // any machine-wide one.
+        foreach (var sub in subKeys)
+            list.Add(new RegistryQueryEntry(RegistryHive.CurrentUser, @"Software\Classes\" + sub, RegistryHiveOrigin.CurrentUser));
+        foreach (var sub in subKeys)
+            list.Add(new RegistryQueryEntry(RegistryHive.LocalMachine, @"SOFTWARE\Classes\" + sub, RegistryHiveOrigin.LocalMachine));
 
         return list;
     }
@@ -102,6 +111,38 @@ public class RegistryService
     /// "audio", "compressed", "document"). Windows stores it on the extension key
     /// and, for older types, on the ProgID instead.
     /// </summary>
+    /// <summary>
+    /// True when a verb with this name is visible for the scope, using exactly the
+    /// same query paths as the list. Anything that answers this question with its own
+    /// list of keys drifts apart from what the user is looking at: the recommendation
+    /// panel used to check only the scope's primary HKCU key, so a verb already
+    /// provided by AllFilesystemObjects / SystemFileAssociations showed as "not
+    /// applied" while the list was displaying it.
+    /// </summary>
+    public bool VerbExistsInScope(MenuScope scope, string verbName)
+        => FindVerbInScope(scope, verbName) is not null;
+
+    /// <summary>
+    /// Where the scope's verb actually lives, following the same order the list uses.
+    /// Returning the location (not just a bool) is what lets the preset writer avoid
+    /// creating a duplicate: a verb provided by <c>AllFilesystemObjects</c> is already
+    /// on the menu, so writing it into <c>*\shell</c> adds a second identical row.
+    /// </summary>
+    public (RegistryHive Hive, string SubKey)? FindVerbInScope(MenuScope scope, string verbName)
+    {
+        if (string.IsNullOrWhiteSpace(verbName)) return null;
+        foreach (var entry in GetShellQueryPaths(scope))
+        {
+            var subKey = entry.SubKey + "\\" + verbName;
+            if (OpenRead(entry.Hive, subKey) is { } key)
+            {
+                key.Dispose();
+                return (entry.Hive, subKey);
+            }
+        }
+        return null;
+    }
+
     public string? ResolvePerceivedType(string extension, string? progId)
     {
         try

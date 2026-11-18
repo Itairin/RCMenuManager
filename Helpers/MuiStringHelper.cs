@@ -41,6 +41,15 @@ public static class MuiStringHelper
         return Cache.GetOrAdd(indirect, ResolveCore);
     }
 
+    /// <summary>
+    /// True when the text is an unresolved indirect reference such as
+    /// <c>@windows.storage.dll,-8519</c>. Those must never be shown as a menu label:
+    /// SHLoadIndirectString fails for resources that ship inside a packaged DLL
+    /// (windows.storage.dll on Win11) and the raw string reads as garbage in the UI.
+    /// </summary>
+    public static bool IsIndirectReference(string? text)
+        => !string.IsNullOrEmpty(text) && text.StartsWith('@');
+
     private static string? ResolveCore(string indirect)
     {        // Not an indirect reference - hand it back as a literal string.
         if (!indirect.StartsWith('@'))

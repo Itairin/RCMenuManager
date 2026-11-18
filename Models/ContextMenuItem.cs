@@ -59,6 +59,13 @@ public sealed class ContextMenuItem
     public bool HasLuaShield { get; init; }
 
     /// <summary>
+    /// <c>HideBasedOnVelocityId</c> / <c>ShowBasedOnVelocityId</c>. Explorer shows or
+    /// hides the verb depending on how often it has been used; the registry alone
+    /// cannot say whether it is visible right now.
+    /// </summary>
+    public bool HasVelocityCondition { get; init; }
+
+    /// <summary>
     /// True when this item is not owned by the parent menu but resolved from the
     /// shared <c>CommandStore</c>. Editing or deleting it changes every menu that
     /// references the same command, so the UI must warn before touching it.
@@ -67,6 +74,40 @@ public sealed class ContextMenuItem
 
     /// <summary>True for verbs known to be system-critical (open/edit/print/...).</summary>
     public bool IsSystemVerb { get; init; }
+
+    /// <summary>
+    /// CLSID of a Win11-style <c>ExplorerCommandHandler</c>. These keys have no
+    /// command line and often no display name of their own — the label is rendered
+    /// by the handler — which is why the raw key name used to leak into the list.
+    /// </summary>
+    public string? ExplorerCommandHandler { get; init; }
+
+    /// <summary>
+    /// True when this row came from the menu Windows built rather than from a registry
+    /// key this app can edit (a shell extension's dynamic entry, a packaged app's
+    /// ExplorerCommand, an Explorer-internal row). Such rows are read-only.
+    /// </summary>
+    public bool IsShellProvided { get; init; }
+
+    /// <summary>
+    /// Why the row is read-only, shown in the details pane.
+    /// </summary>
+    public string? ShellSourceDetail { get; init; }
+
+    /// <summary>
+    /// True for a registry verb the shell did not draw for this scope (hidden by a
+    /// condition, by usage frequency, or not applicable). The list still shows it —
+    /// it can be edited — but it is labelled so the list never claims a menu item that
+    /// is not actually there.
+    /// </summary>
+    public bool NotInShellMenu { get; init; }
+
+    /// <summary>
+    /// True when the registry key carries neither a default value nor a MUIVerb.
+    /// The displayed name is then inferred, not stored, and the UI must say so
+    /// instead of presenting a bare key name as if Explorer showed it.
+    /// </summary>
+    public bool HasNoStoredLabel { get; init; }
 
     /// <summary>True when the entry uses cascading children (SubCommands / nested shell / ExtendedSubCommandsKey).</summary>
     public bool HasChildren => Children.Count > 0;

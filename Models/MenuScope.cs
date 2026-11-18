@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace RCMenuManager.Models;
 
@@ -100,6 +100,26 @@ public sealed class MenuScope : IEquatable<MenuScope>
 
     /// <summary>HKCU prefix that maps to the same scope (under Software\\Classes).</summary>
     public string HkcuShellSubKey => $@"Software\Classes\{ShellSubKey}";
+
+    /// <summary>
+    /// Parses an id back to a MenuScope, restoring the ProgID when the caller can
+    /// supply it. <see cref="ScopeId"/> is deliberately stable (<c>FileExt:.txt</c>),
+    /// which means the ProgID is not in it; rebuilding the scope without one dropped
+    /// <c>txtfile\shell</c> and <c>SystemFileAssociations\txtfile</c> from every query
+    /// after an elevation relaunch, so half the items disappeared.
+    /// </summary>
+    public static MenuScope FromScopeId(string id, string? progId)
+    {
+        var scope = FromScopeId(id);
+        if (scope.Type == ScopeType.FileExtension
+            && string.IsNullOrEmpty(scope.ProgId)
+            && !string.IsNullOrEmpty(progId)
+            && !string.IsNullOrEmpty(scope.Extension))
+        {
+            return ForExtension(scope.Extension!, progId);
+        }
+        return scope;
+    }
 
     /// <summary>Parses an id back to a MenuScope. Throws when the id is unknown.</summary>
     public static MenuScope FromScopeId(string id)

@@ -15,10 +15,20 @@ public sealed class PresetService : IPresetService
 
     private readonly IRegistryWriter _writer;
     private readonly RegistryWriteService _regWriter;
+    private readonly RegistryService? _registry;
     private readonly string _builtInPath;
     private readonly bool _useEmbeddedDefault;
 
     public string UserPresetsPath { get; }
+
+    public PresetService(IRegistryWriter writer, RegistryWriteService regWriter, RegistryService registry)
+        : this(writer, regWriter,
+               Path.Combine(AppContext.BaseDirectory, "Resources", "presets.json"),
+               DefaultUserPresetsPath(),
+               useEmbeddedDefault: true,
+               registry: registry)
+    {
+    }
 
     public PresetService(IRegistryWriter writer, RegistryWriteService regWriter)
         : this(writer, regWriter,
@@ -33,10 +43,12 @@ public sealed class PresetService : IPresetService
         RegistryWriteService regWriter,
         string builtInPath,
         string userPath,
-        bool useEmbeddedDefault = false)
+        bool useEmbeddedDefault = false,
+        RegistryService? registry = null)
     {
         _writer = writer;
         _regWriter = regWriter;
+        _registry = registry;
         _builtInPath = builtInPath;
         _useEmbeddedDefault = useEmbeddedDefault;
         UserPresetsPath = userPath;
@@ -91,10 +103,34 @@ public sealed class PresetService : IPresetService
         }
     }
 
-    public bool IsApplied(PresetItem item)
+    /// <summary>
+    /// True when this preset is already present on the machine.
+    /// <para>
+    /// Both hives are checked: an entry installed machine-wide (HKLM) makes the
+    /// preset "already there" just as much as a per-user one does, and reporting it
+    /// as unapplied made the dialog offer to create a duplicate — which then landed
+    /// in HKCU and produced two identical menu rows.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// True when the scope already offers this verb, checked over the same query
+    /// paths the list uses. Keeping one definition is what stops the panel from
+    /// saying "not applied" about an entry the list is already showing.
+    /// </summary>
+    public bool IsApplied(PresetItem item) => IsVerbPresent(item.Scope, item.VerbName);
+
+    /// <summary>Same check for an arbitrary scope id, used by the dialog.</summary>
+    public bool IsVerbPresent(string scopeId, string verbName)
     {
-        var scope = MenuScope.FromScopeId(item.Scope);
-        return _writer.KeyExists(RegistryHive.CurrentUser, scope.HkcuShellSubKey + "\\" + item.VerbName);
+        if (string.IsNullOrWhiteSpace(verbName)) return false;
+        var scope = MenuScope.FromScopeId(scopeId);
+
+        if (_registry is not null)
+            return _registry.VerbExistsInScope(scope, verbName);
+
+        // Fallback for callers that did not supply a RegistryService (tests): check
+        // the two homes a preset can live in.
+        return _writer.KeyExists(RegistryHive.CurrentUser, scope.HkcuShellSubKey + "\\" + verbName);
     }
 
     public void Apply(PresetItem item, bool overwrite)
@@ -111,6 +147,18 @@ public sealed class PresetService : IPresetService
             IsParentOnly = false,
         };
         var parentSubKey = scope.HkcuShellSubKey;
+
+        // The scope may already provide this verb through another query path
+        // (AllFilesystemObjects, SystemFileAssociations, or the machine hive). The
+        // row is on the menu either way, so creating the per-user copy only adds a
+        // duplicate — report "已经有"，which is also what the panel's checkbox said.
+        var existing = _registry?.FindVerbInScope(scope, item.VerbName);
+        if (existing is not null
+            && !(existing.Value.Hive == RegistryHive.CurrentUser && existing.Value.SubKey == parentSubKey + "\\" + item.VerbName))
+        {
+            throw new PresetConflictException(item.Scope, item.VerbName);
+        }
+
         try
         {
             _regWriter.CreateRootVerb(RegistryHive.CurrentUser, parentSubKey, scope.ScopeId, draft);
@@ -122,6 +170,7 @@ public sealed class PresetService : IPresetService
             _regWriter.Delete(RegistryHive.CurrentUser, verbKey, scope.ScopeId, item.VerbName);
             _regWriter.CreateRootVerb(RegistryHive.CurrentUser, parentSubKey, scope.ScopeId, draft);
         }
+
     }
 
     public void SaveUserPreset(PresetItem item)

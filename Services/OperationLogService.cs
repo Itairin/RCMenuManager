@@ -87,14 +87,30 @@ public sealed class OperationLogService : IOperationLog
 
     public IReadOnlyList<OperationLogEntry> ReadAll()
     {
-        if (!File.Exists(_path)) return Array.Empty<OperationLogEntry>();
+        // Rotated generations are read oldest-first so the returned order still
+        // matches "append order". Without them a backup taken before the last
+        // rotation has no log entry, and the backup dialog could only say
+        // "no operation recorded" for a file that is sitting right there.
         var list = new List<OperationLogEntry>();
-        foreach (var line in File.ReadAllLines(_path))
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            try { list.Add(JsonSerializer.Deserialize<OperationLogEntry>(line)!); }
-            catch { }
-        }
+        for (var gen = KeptGenerations; gen >= 1; gen--)
+            ReadInto(list, _path + "." + gen);
+        ReadInto(list, _path);
         return list;
+    }
+
+    private static void ReadInto(List<OperationLogEntry> target, string path)
+    {
+        if (!File.Exists(path)) return;
+        try
+        {
+            foreach (var line in File.ReadAllLines(path))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                try { target.Add(JsonSerializer.Deserialize<OperationLogEntry>(line)!); }
+                catch { /* one corrupt line must not hide the rest of the history */ }
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 }

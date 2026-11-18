@@ -23,8 +23,13 @@ namespace RCMenuManager.Services;
 /// </summary>
 public interface IShellContextMenuReader
 {
-    /// <summary>Null when the shell could not produce a menu for this scope.</summary>
-    IReadOnlyList<ShellMenuNode>? TryRead(MenuScope scope, bool extendedVerbs);
+    /// <summary>
+    /// Reads the menu Explorer would build. Null when the shell could not produce one.
+    /// <paramref name="targetPath"/> makes the shell describe that exact file / folder
+    /// instead of the scratch sample — that is what a dropped item needs, because
+    /// per-object conditions (AppliesTo, packaged handlers) are evaluated against it.
+    /// </summary>
+    IReadOnlyList<ShellMenuNode>? TryRead(MenuScope scope, bool extendedVerbs, string? targetPath = null);
 
     /// <summary>Drops cached menus; call after a registry write so the next read reflects it.</summary>
     void Invalidate();
@@ -49,9 +54,13 @@ public sealed class ShellContextMenuReader : IShellContextMenuReader
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _readGates = new();
     private int _generation;
 
-    public IReadOnlyList<ShellMenuNode>? TryRead(MenuScope scope, bool extendedVerbs)
+    public IReadOnlyList<ShellMenuNode>? TryRead(MenuScope scope, bool extendedVerbs, string? targetPath = null)
     {
-        var key = scope.ScopeId + (extendedVerbs ? "|ext" : "|norm");
+        // The target belongs in the key: the same scope produces a different menu for
+        // another folder, and reusing the first answer would show the wrong entries.
+        var key = scope.ScopeId
+                  + (extendedVerbs ? "|ext" : "|norm")
+                  + (string.IsNullOrEmpty(targetPath) ? string.Empty : "|" + targetPath);
         if (TryGetCached(key, out var cached)) return cached;
 
         // One read per key at a time. The UI thread (right-click) and the
@@ -73,7 +82,7 @@ public sealed class ShellContextMenuReader : IShellContextMenuReader
             IReadOnlyList<ShellMenuNode>? nodes;
             try
             {
-                nodes = Read(scope, extendedVerbs);
+                nodes = Read(scope, extendedVerbs, targetPath);
             }
             catch
             {
@@ -129,8 +138,25 @@ public sealed class ShellContextMenuReader : IShellContextMenuReader
         }
     }
 
-    private static IReadOnlyList<ShellMenuNode>? Read(MenuScope scope, bool extendedVerbs)
+    private static IReadOnlyList<ShellMenuNode>? Read(MenuScope scope, bool extendedVerbs, string? targetPath)
     {
+        // An explicit target always wins: the user dropped that item, so the shell
+        // should describe it rather than a sample file of the same type.
+        if (!string.IsNullOrEmpty(targetPath))
+        {
+            if (Directory.Exists(targetPath))
+            {
+                // A folder has two different menus. Asking for the item menu while the
+                // user is looking at the blank area returned the same rows for both and
+                // made the "看文件夹空白处" switch look broken.
+                return scope.Type == ScopeType.FolderBackground
+                    ? RunSta(() => ShellMenuInterop.ReadBackground(targetPath, extendedVerbs))
+                    : RunSta(() => ShellMenuInterop.Read(new ShellMenuInterop.Target(targetPath), extendedVerbs));
+            }
+            if (File.Exists(targetPath))
+                return RunSta(() => ShellMenuInterop.Read(new ShellMenuInterop.Target(targetPath), extendedVerbs));
+        }
+
         switch (scope.Type)
         {
             case ScopeType.Desktop:

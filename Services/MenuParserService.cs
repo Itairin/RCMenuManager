@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Win32;
@@ -65,6 +65,133 @@ public class MenuParserService
         return SortByPosition(ordered.Select(v => seen[v]));
     }
 
+    /// <summary>
+    /// Builds the list the way Explorer builds the menu: the shell's own output is the
+    /// backbone (labels, order, sub-menus, disabled state), and registry verbs are
+    /// matched into it so they stay editable.
+    /// <para>
+    /// This is the fix for "列表比真实菜单少": entries such as UltraISO (a shellex
+    /// handler whose submenu the DLL builds at runtime) and packaged-app commands such
+    /// as "Open project in ChatGPT" are absent from every class key under
+    /// <c>Directory\shell</c>, so a registry-only list can never contain them. Rows
+    /// that exist only in the registry are appended and flagged
+    /// <see cref="ContextMenuItem.NotInShellMenu"/>.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<ContextMenuItem> MergeWithShellMenu(
+        IReadOnlyList<ContextMenuItem> registryItems,
+        IReadOnlyList<ShellMenuNode>? normalMenu,
+        IReadOnlyList<ShellMenuNode>? extendedMenu)
+    {
+        if (normalMenu is not { Count: > 0 } && extendedMenu is not { Count: > 0 })
+            return SortByPosition(registryItems);
+
+        var remaining = new List<ContextMenuItem>(registryItems);
+        var merged = new List<ContextMenuItem>(registryItems.Count + 8);
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Emit(IReadOnlyList<ShellMenuNode> nodes, bool extendedOnly)
+        {
+            foreach (var node in nodes)
+            {
+                if (node.IsSeparator) continue;
+
+                var label = MenuTextHelper.NormalizeForMatch(node.Text);
+                var match = remaining.FirstOrDefault(i =>
+                    !used.Contains(i.VerbName) &&
+                    string.Equals(MenuTextHelper.NormalizeForMatch(i.DisplayName), label, StringComparison.OrdinalIgnoreCase));
+
+                if (match is not null)
+                {
+                    used.Add(match.VerbName);
+                    merged.Add(match);
+                    continue;
+                }
+
+                // Nothing editable behind this row: keep it as a read-only entry so the
+                // list mirrors the menu instead of silently dropping it.
+                merged.Add(new ContextMenuItem
+                {
+                    // No verb of its own: repeating the label here made the row print its
+                    // title twice (name + "verb" column).
+                    VerbName = string.Empty,
+                    DisplayName = label.Length > 0 ? label : node.Text,
+                    HasNoStoredLabel = false,
+                    IsShellProvided = true,
+                    ShellSourceDetail = extendedOnly
+                        ? "该行只出现在 Shift+右键 菜单中，由系统或应用扩展提供，本工具无法编辑。"
+                        : "该行由系统菜单直接生成（可能是 shell 扩展 DLL、MSIX 包应用或 Explorer 自身功能），注册表里没有对应的可编辑 verb。",
+                    Children = node.Children
+                        .Where(c => !c.IsSeparator)
+                        .Select(c => new ContextMenuItem
+                        {
+                            VerbName = string.Empty,
+                            DisplayName = MenuTextHelper.NormalizeForMatch(c.Text),
+                            IsShellProvided = true,
+                            ShellSourceDetail = "子项由扩展在运行时生成，本工具无法编辑。",
+                        })
+                        .ToList(),
+                });
+            }
+        }
+
+        Emit(normalMenu ?? Array.Empty<ShellMenuNode>(), extendedOnly: false);
+
+        // The Shift menu is a superset of the normal one, so it must not add rows of
+        // its own: doing that duplicated every entry (Open Git GUI here / Open Git &GUI
+        // here, 打开 / 打开(&O) …). It is only consulted to match verbs that Explorer
+        // shows exclusively in the extended menu.
+        if (extendedMenu is { Count: > 0 })
+        {
+            foreach (var node in extendedMenu)
+            {
+                if (node.IsSeparator) continue;
+                var label = MenuTextHelper.NormalizeForMatch(node.Text);
+                var match = remaining.FirstOrDefault(i =>
+                    !used.Contains(i.VerbName) &&
+                    string.Equals(MenuTextHelper.NormalizeForMatch(i.DisplayName), label, StringComparison.OrdinalIgnoreCase));
+                if (match is null) continue;
+                used.Add(match.VerbName);
+                merged.Add(match);
+            }
+        }
+
+        // Registry verbs the shell did not draw: still listed (they can be edited) but
+        // flagged, otherwise the list would contradict the menu in the other direction.
+        foreach (var leftover in SortByPosition(remaining.Where(i => !used.Contains(i.VerbName))))
+        {
+            merged.Add(new ContextMenuItem
+            {
+                VerbName = leftover.VerbName,
+                DisplayName = leftover.DisplayName,
+                Command = leftover.Command,
+                ExpandedCommand = leftover.ExpandedCommand,
+                IconExpression = leftover.IconExpression,
+                MuiVerb = leftover.MuiVerb,
+                Position = leftover.Position,
+                IsExtended = leftover.IsExtended,
+                IsProgrammaticOnly = leftover.IsProgrammaticOnly,
+                IsNeverDefault = leftover.IsNeverDefault,
+                IsLegacyDisabled = leftover.IsLegacyDisabled,
+                DelegateExecute = leftover.DelegateExecute,
+                ExplorerCommandHandler = leftover.ExplorerCommandHandler,
+                AppliesTo = leftover.AppliesTo,
+                HasLuaShield = leftover.HasLuaShield,
+                HasVelocityCondition = leftover.HasVelocityCondition,
+                IsSharedDefinition = leftover.IsSharedDefinition,
+                IsSystemVerb = leftover.IsSystemVerb,
+                HasNoStoredLabel = leftover.HasNoStoredLabel,
+                Origin = leftover.Origin,
+                RegistryPath = leftover.RegistryPath,
+                Children = leftover.Children,
+                Cascading = leftover.Cascading,
+                NotInShellMenu = true,
+            });
+        }
+
+        return merged;
+    }
+
     /// <summary>Same as <see cref="GetMenuItems"/> but lets the caller specify a single registry root.</summary>
     public IReadOnlyList<ContextMenuItem> GetMenuItemsFrom(RegistryQueryEntry entry)
     {
@@ -109,6 +236,9 @@ public class MenuParserService
                 var (name, dll) = ResolveClsid(clsid);
                 results.Add(new ShellExtensionInfo
                 {
+                    // FriendlyName keeps the CLSID's own name so the matcher can use
+                    // it; DisplayName is what the UI shows when nothing better exists.
+                    FriendlyName = string.IsNullOrEmpty(name) ? string.Empty : name,
                     DisplayName = string.IsNullOrEmpty(name) ? sub : name,
                     Clsid = clsid,
                     DllPath = dll,
@@ -218,6 +348,7 @@ public class MenuParserService
         var icon = verbKey.GetValue("Icon") as string;
         var position = verbKey.GetValue("Position") as string;
         var delegateExecute = verbKey.GetValue("DelegateExecute") as string;
+        var explorerCommandHandler = verbKey.GetValue("ExplorerCommandHandler") as string;
         var appliesTo = verbKey.GetValue("AppliesTo") as string;
         var valueNames = verbKey.GetValueNames();
         var hasExtended = valueNames.Any(n => string.Equals(n, "Extended", StringComparison.OrdinalIgnoreCase));
@@ -225,8 +356,11 @@ public class MenuParserService
         var hasNeverDefault = valueNames.Any(n => string.Equals(n, "NeverDefault", StringComparison.OrdinalIgnoreCase));
         var hasLegacyDisable = valueNames.Any(n => string.Equals(n, "LegacyDisable", StringComparison.OrdinalIgnoreCase));
         var hasLuaShield = valueNames.Any(n => string.Equals(n, "HasLUAShield", StringComparison.OrdinalIgnoreCase));
+        var hasVelocity = valueNames.Any(n =>
+            string.Equals(n, "HideBasedOnVelocityId", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(n, "ShowBasedOnVelocityId", StringComparison.OrdinalIgnoreCase));
 
-        var displayName = ResolveDisplayName(muiVerb, defaultName, verbName);
+        var displayName = ResolveDisplayName(muiVerb, defaultName, verbName, explorerCommandHandler);
         var command = ReadCommand(verbKey);
         var expandedCommand = string.IsNullOrEmpty(command)
             ? string.Empty
@@ -249,12 +383,19 @@ public class MenuParserService
             IsNeverDefault = hasNeverDefault,
             IsLegacyDisabled = hasLegacyDisable,
             DelegateExecute = string.IsNullOrEmpty(delegateExecute) ? null : delegateExecute,
+            ExplorerCommandHandler = string.IsNullOrEmpty(explorerCommandHandler) ? null : explorerCommandHandler,
+            HasNoStoredLabel = string.IsNullOrWhiteSpace(defaultName) && string.IsNullOrWhiteSpace(muiVerb),
             AppliesTo = string.IsNullOrEmpty(appliesTo) ? null : appliesTo,
             HasLuaShield = hasLuaShield,
+            HasVelocityCondition = hasVelocity,
             IsSharedDefinition = isSharedDefinition,
             IsSystemVerb = SystemVerbs.Contains(verbName),
             Origin = rootEntry.Origin,
-            RegistryPath = $@"{rootEntry.FullPath}\{verbKey.Name.Substring(verbKey.Name.LastIndexOf('\\') + 1)}",
+            // The key's own full path is the only coordinate the write side can trust.
+            // Rebuilding it from the scope root lost the "\<parent>\shell\" segment for
+            // nested children, so saving one wrote to a fresh junk key and deleting one
+            // silently did nothing.
+            RegistryPath = verbKey.Name,
             Children = children,
             Cascading = cascading,
         };
@@ -285,50 +426,91 @@ public class MenuParserService
         }
     }
 
-    private static string ResolveDisplayName(string? muiVerb, string? defaultName, string verbName)
+    /// <summary>
+    /// Turns the stored values into the text a user should see.
+    /// <para>
+    /// The order mirrors Explorer: MUIVerb wins, then the default value, both of
+    /// which may be indirect (<c>@dll,-id</c>) references. When neither exists the
+    /// previous code fell through to the raw key name, which is how
+    /// <c>HKLM\...\DesktopBackground\Shell\.SpotlightLearnMore</c> ended up showing
+    /// ".SpotlightLearnMore" in the UI while Explorer shows a localized label — the
+    /// name lives in the <c>ExplorerCommandHandler</c> CLSID, not in the key.
+    /// </para>
+    /// </summary>
+    private static string ResolveDisplayName(string? muiVerb, string? defaultName, string verbName,
+        string? explorerCommandHandler)
     {
         // MUIVerb is the string Explorer prefers. It may be a literal or an
         // "@<dll>,-<id>" indirect reference; resolve the latter through MUI.
         if (!string.IsNullOrEmpty(muiVerb))
         {
-            if (muiVerb.StartsWith('@'))
-            {
-                var resolved = MuiStringHelper.Resolve(muiVerb);
-                if (!string.IsNullOrEmpty(resolved))
-                    return resolved!;
-            }
-            else
-            {
+            if (!MuiStringHelper.IsIndirectReference(muiVerb))
                 return muiVerb;
-            }
+
+            var resolved = MuiStringHelper.Resolve(muiVerb);
+            // IsIndirectReference / Resolve both hand back the input unchanged when
+            // they cannot do better; an unresolved "@dll,-id" is not a label.
+            if (!string.IsNullOrEmpty(resolved) && !MuiStringHelper.IsIndirectReference(resolved))
+                return resolved!;
         }
 
         if (!string.IsNullOrEmpty(defaultName))
         {
-            if (defaultName!.StartsWith('@'))
-            {
-                var resolved = MuiStringHelper.Resolve(defaultName);
-                if (!string.IsNullOrEmpty(resolved))
-                    return resolved!;
-            }
-            else
-            {
+            if (!MuiStringHelper.IsIndirectReference(defaultName))
                 return defaultName;
-            }
+
+            var resolved = MuiStringHelper.Resolve(defaultName);
+            if (!string.IsNullOrEmpty(resolved) && !MuiStringHelper.IsIndirectReference(resolved))
+                return resolved!;
         }
 
-        // Last resort: show the raw indirect reference so the user still sees something.
-        if (!string.IsNullOrEmpty(muiVerb))
-            return muiVerb!;
-        if (!string.IsNullOrEmpty(defaultName))
-            return defaultName!;
+        // Win11 command handlers keep their label in the CLSID registration.
+        var fromHandler = ResolveHandlerLabel(explorerCommandHandler);
+        if (!string.IsNullOrEmpty(fromHandler))
+            return fromHandler!;
 
         // Shell-owned verbs (open/runas/edit/...) store their label in Windows,
         // not in the registry — Explorer shows 打开(O) where the key says "open".
         var standard = Helpers.StandardVerbLabels.Resolve(verbName);
         if (standard is not null)
             return standard;
+
+        // An unresolved resource reference is worse than the key name: the key at
+        // least tells the user which verb this is. The item is flagged as having no
+        // stored label, so the UI marks it as inferred instead of presenting a
+        // registry identifier as a menu title.
         return verbName;
+    }
+
+    /// <summary>
+    /// Reads the display name a Win11 <c>ExplorerCommandHandler</c> registers for
+    /// itself. The HKCR default value is usually the handler's own type name (for
+    /// example "Edit Stickers"), which is what Explorer puts in the menu.
+    /// </summary>
+    private static string? ResolveHandlerLabel(string? handlerClsid)
+    {
+        if (string.IsNullOrWhiteSpace(handlerClsid)) return null;
+
+        // Curated names win: some handlers register only a technical identifier
+        // (".SpotlightLearnMore") while Explorer draws a localized sentence.
+        var known = Helpers.StandardVerbLabels.ResolveHandler(handlerClsid);
+        if (!string.IsNullOrEmpty(known)) return known;
+
+        try
+        {
+            using var key = Registry.ClassesRoot.OpenSubKey($@"CLSID\{handlerClsid}");
+            var raw = key?.GetValue(string.Empty) as string;
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            // A GUID as a name is not a label.
+            if (raw!.StartsWith('{')) return null;
+            if (raw.StartsWith('@'))
+                return MuiStringHelper.Resolve(raw) ?? null;
+            return raw;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
