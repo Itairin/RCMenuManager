@@ -24,7 +24,7 @@ public class NativeShellMenuTests
     [SkippableFact]
     public void Exe_scope_reads_the_real_shell_menu()
     {
-        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
+        Skip.IfNot(ShellEnvironment.CanAssertChineseLabels, ShellEnvironment.SkipReasonChinese);
         var scope = MenuScope.ForExtension(".exe", "exefile");
         var nodes = ShellContextMenuReader.Instance.TryRead(scope, extendedVerbs: false);
 
@@ -56,7 +56,7 @@ public class NativeShellMenuTests
     [InlineData(".xyz", null, "打开方式")]
     public void Other_file_types_read_the_real_shell_menu(string extension, string? progId, string firstRow)
     {
-        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
+        Skip.IfNot(ShellEnvironment.CanAssertChineseLabels, ShellEnvironment.SkipReasonChinese);
         var scope = MenuScope.ForExtension(extension, progId);
         var nodes = ShellContextMenuReader.Instance.TryRead(scope, extendedVerbs: false);
 
@@ -74,7 +74,7 @@ public class NativeShellMenuTests
     [SkippableFact]
     public void Second_read_of_the_same_scope_comes_from_cache()
     {
-        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
+        Skip.IfNot(ShellEnvironment.CanAssertChineseLabels, ShellEnvironment.SkipReasonChinese);
         var scope = MenuScope.ForExtension(".png", "pngfile");
         ShellContextMenuReader.Instance.TryRead(scope, false);
 
@@ -94,7 +94,7 @@ public class NativeShellMenuTests
     [SkippableFact]
     public void Invalidate_forces_the_shell_to_be_asked_again()
     {
-        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
+        Skip.IfNot(ShellEnvironment.CanAssertChineseLabels, ShellEnvironment.SkipReasonChinese);
         var reader = new ShellContextMenuReader();
         var scope = MenuScope.ForExtension(".txt", "txtfile");
 
@@ -117,7 +117,7 @@ public class NativeShellMenuTests
     [SkippableFact]
     public void Extended_verbs_are_cached_apart_from_the_normal_menu()
     {
-        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
+        Skip.IfNot(ShellEnvironment.CanAssertChineseLabels, ShellEnvironment.SkipReasonChinese);
         var reader = new ShellContextMenuReader();
         var scope = MenuScope.ForExtension(".txt", "txtfile");
 
@@ -133,7 +133,7 @@ public class NativeShellMenuTests
     [SkippableFact]
     public void Native_rows_link_back_to_editable_verbs()
     {
-        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
+        Skip.IfNot(ShellEnvironment.CanAssertChineseLabels, ShellEnvironment.SkipReasonChinese);
         var scope = MenuScope.ForExtension(".exe", "exefile");
         var reg = new RegistryService();
         var parser = new MenuParserService(reg);
