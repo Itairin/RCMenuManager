@@ -21,9 +21,10 @@ public class NativeShellMenuTests
     private readonly ITestOutputHelper _out;
     public NativeShellMenuTests(ITestOutputHelper o) => _out = o;
 
-    [Fact]
+    [SkippableFact]
     public void Exe_scope_reads_the_real_shell_menu()
     {
+        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
         var scope = MenuScope.ForExtension(".exe", "exefile");
         var nodes = ShellContextMenuReader.Instance.TryRead(scope, extendedVerbs: false);
 
@@ -44,7 +45,7 @@ public class NativeShellMenuTests
     /// 打开/编辑 from SystemFileAssociations\text, images get 打印/设为桌面背景,
     /// and an unassociated extension must fall back to a bare 打开方式 menu.
     /// </summary>
-    [Theory]
+    [SkippableTheory]
     [InlineData(".txt", "txtfile", "打开")]
     [InlineData(".png", "pngfile", "打开")]
     [InlineData(".jpg", "jpegfile", "打开")]
@@ -55,6 +56,7 @@ public class NativeShellMenuTests
     [InlineData(".xyz", null, "打开方式")]
     public void Other_file_types_read_the_real_shell_menu(string extension, string? progId, string firstRow)
     {
+        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
         var scope = MenuScope.ForExtension(extension, progId);
         var nodes = ShellContextMenuReader.Instance.TryRead(scope, extendedVerbs: false);
 
@@ -69,9 +71,10 @@ public class NativeShellMenuTests
         Assert.All(texts, t => Assert.False(string.IsNullOrWhiteSpace(t)));
     }
 
-    [Fact]
+    [SkippableFact]
     public void Second_read_of_the_same_scope_comes_from_cache()
     {
+        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
         var scope = MenuScope.ForExtension(".png", "pngfile");
         ShellContextMenuReader.Instance.TryRead(scope, false);
 
@@ -88,9 +91,10 @@ public class NativeShellMenuTests
     /// If it did not really drop the cached menu the preview would keep showing
     /// the state from before the edit.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public void Invalidate_forces_the_shell_to_be_asked_again()
     {
+        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
         var reader = new ShellContextMenuReader();
         var scope = MenuScope.ForExtension(".txt", "txtfile");
 
@@ -110,9 +114,10 @@ public class NativeShellMenuTests
     /// made the first right-click after ticking "显示 Shift 项" do a full cold
     /// read on the UI thread; both are prewarmed now, and both must be distinct.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public void Extended_verbs_are_cached_apart_from_the_normal_menu()
     {
+        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
         var reader = new ShellContextMenuReader();
         var scope = MenuScope.ForExtension(".txt", "txtfile");
 
@@ -125,9 +130,10 @@ public class NativeShellMenuTests
         Assert.Same(extended, reader.TryRead(scope, true));
     }
 
-    [Fact]
+    [SkippableFact]
     public void Native_rows_link_back_to_editable_verbs()
     {
+        Skip.IfNot(ShellEnvironment.CanBuildShellMenu, ShellEnvironment.SkipReason);
         var scope = MenuScope.ForExtension(".exe", "exefile");
         var reg = new RegistryService();
         var parser = new MenuParserService(reg);

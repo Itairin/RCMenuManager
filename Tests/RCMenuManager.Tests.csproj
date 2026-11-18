@@ -11,6 +11,9 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- Real shell menus cannot be built on a CI runner without an interactive
+         desktop; these tests skip instead of failing there. -->
+    <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\RCMenuManager.csproj" />
